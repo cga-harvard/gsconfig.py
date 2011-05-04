@@ -217,7 +217,7 @@ class Catalog(object):
       finally:
           unlink(bundle)
 
-  def create_pg_feature(self, storeXML, name, data, workspace=None, overwrite=False, charset=None):
+  def create_dbstore_feature(self, storeXML, name, data, workspace=None, overwrite=False, charset=None):
 
     if not overwrite:
         try:
