@@ -74,14 +74,35 @@ def prepare_upload_bundle(name, data):
   file-like objects. The client code is responsible for deleting the zip
   archive when it's done."""
     handle, f = mkstemp() # we don't use the file handle directly. should we?
-    zip = ZipFile(f, 'w')
-    for ext, stream in data.iteritems():
-        fname = "%s.%s" % (name, ext)
-        if (isinstance(stream, basestring)):
-            zip.write(stream, fname)
-        else:
-            zip.writestr(fname, stream.read())
-    zip.close()
+    if 'shp' in data:
+        zip = ZipFile(f, 'w')
+        for ext, stream in data.iteritems():
+            fname = "%s.%s" % (name, ext)
+            if (isinstance(stream, basestring)):
+                zip.write(stream, fname)
+            else:
+                zip.writestr(fname, stream.read())
+        zip.close()
+    elif 'zip' in data: #Assume it's a zipfile
+        """Create ZipFile object from uploaded data """
+        oldf = open(data['zip'], 'r')
+        oldzip = ZipFile(oldf)
+
+        """New zip file"""
+        noo = open(f, "wb")
+        newzip = ZipFile(f, "w")
+
+        """Get the necessary files from the uploaded zip, and add them to the new zip
+        with the desired layer name"""
+        zipFiles = oldzip.namelist()
+        files = ['.shp', '.prj', '.shx', '.dbf']
+        fname = "%s" % (name)
+        for file in zipFiles:
+            ext = file[-4:].lower()
+            if ext in files:
+                files.remove(ext) #OS X creates hidden subdirectory with garbage files having same extensions; ignore.
+                logger.debug("================Write [%s].[%s]", fname, ext)
+                newzip.writestr(name + ext, oldzip.read(file))
     return f
 
 def atom_link(node):

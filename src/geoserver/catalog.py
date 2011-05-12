@@ -204,6 +204,8 @@ class Catalog(object):
       else:
           params = ""
 
+      logger.debug('PARAMS: %s', params)
+
       message = open(bundle)
       headers = { 'Content-Type': 'application/zip', 'Accept': 'application/xml' }
       url = "%s/workspaces/%s/datastores/%s/file.shp%s" % (
@@ -216,76 +218,6 @@ class Catalog(object):
               raise UploadError(response)
       finally:
           unlink(bundle)
-
-  def create_dbstore_feature(self, storeXML, name, data, workspace=None, overwrite=False, charset=None):
-
-    if not overwrite:
-        try:
-            layer = self.get_layer(name)
-            if layer:
-                msg = "There is already a layer named " + name
-                if workspace:
-                    msg += " in " + str(workspace)
-                raise ConflictingDataError(msg)
-        except FailedRequestError, e:
-            # we don't really expect that every layer name will be taken
-            pass
-
-    if workspace is None:
-      workspace = self.get_default_workspace()
-
-    message = storeXML
-
-    #Create new PostGIS datastore (only if this is a new layer)
-    if not overwrite:
-        store_url = "%s/workspaces/%s/datastores" % (self.service_url, workspace.name)
-        headers = {
-        "Content-type": "text/xml",
-        "Accept": "application/xml"
-        }
-        try:
-            logger.debug("Attempt GS PostGIS store creation")
-            headers, response = self.http.request(store_url, "POST", message, headers)
-            self._cache.clear()
-            if headers.status != 201:
-                logger.error('Store creation failed: %s', headers.status)
-                raise UploadError(response)
-        except Exception, ex:
-            logger.error('Store creation failed: %s', str(ex))
-            raise UploadError(ex)
-
-    #Create/update layer
-    if charset:
-        ds_url = "%s/workspaces/%s/datastores/%s/file.shp?charset=%s" % (self.service_url, workspace.name, name, charset)
-    else:
-        ds_url = "%s/workspaces/%s/datastores/%s/file.shp" % (self.service_url, workspace.name, name)
-
-    if overwrite:
-        ds_url = ds_url + ("&" if charset else "?") + "update=overwrite"
-
-
-    headers = {
-      "Content-type": "application/zip",
-      "Accept": "application/xml"
-    }
-
-    logger.debug("Upload GS URL is [%s]", ds_url)
-    if  isinstance(data,dict):
-        logger.debug('Data is NOT a zipfile')
-        zip = prepare_upload_bundle(name, data)
-    else:
-        logger.debug('Data is a zipfile')
-        zip = data
-    message = open(zip)
-    try:
-      logger.debug("Attempt GS import")
-      headers, response = self.http.request(ds_url, "PUT", message, headers)
-      self._cache.clear()
-      if headers.status != 201:
-          raise UploadError(response)
-    finally:
-      if zip:
-        unlink(zip)
 
   def create_featurestore(self, name, data, workspace=None, overwrite=False, charset=None):
     if not overwrite:
@@ -301,10 +233,21 @@ class Catalog(object):
 
     if workspace is None:
       workspace = self.get_default_workspace()
-    if charset:
-        ds_url = "%s/workspaces/%s/datastores/%s/file.shp?charset=%s" % (self.service_url, workspace.name, name, charset)
+
+    params = dict()
+    if overwrite:
+          params["overwrite"] = True
+    if charset is not None:
+          params["charset"] = charset
+
+    if len(params):
+          params = "?" + urlencode(params)
     else:
-        ds_url = "%s/workspaces/%s/datastores/%s/file.shp" % (self.service_url, workspace.name, name)
+          params = ""
+
+
+
+    ds_url = "%s/workspaces/%s/datastores/%s/file.shp%s" % (self.service_url, workspace.name, name, params)
 
     # PUT /workspaces/<ws>/datastores/<ds>/file.shp
     headers = {
