@@ -27,52 +27,135 @@ information from the underlying storage mechanism to reproject to the
 configured projection.
 """
 
+def xml_property(path, converter = lambda x: x.text):
+    def get(self):
+        if path in self.dirty:
+            return self.dirty[path]
+        else:
+            if self.dom is None:
+                self.fetch()
+            node = self.dom.find(path)
+            return converter(self.dom.find(path)) if node is not None else None
+
+    def set(self, value):
+        self.dirty[path] = value
+
+    def delete(self):
+        self.dirty[path] = None
+
+    return property(get, set, delete)
+
+def bbox(node):
+    if node is not None: 
+        minx = node.find("minx")
+        maxx = node.find("maxx")
+        miny = node.find("miny")
+        maxy = node.find("maxy")
+        crs  = node.find("crs")
+        crs  = crs.text if crs is not None else None
+
+        if (None not in [minx, maxx, miny, maxy]):
+            return (minx.text, maxx.text, miny.text, maxy.text, crs)
+        else: 
+            return None
+    else:
+        return None
+
+def string_list(node):
+    if node is not None:
+       return [n.text for n in node.findall("string")]
+
+def attribute_list(node):
+    if node is not None:
+       return [n.text for n in node.findall("attribute/name")]
+
+def key_value_pairs(node):
+    if node is not None:
+        return dict((entry.attrib['key'], entry.text) for entry in node.findall("entry"))
+
+def write_string(name):
+    def write(builder, value):
+        builder.start(name, dict())
+        if (value is not None):
+            builder.data(value)
+        builder.end(name)
+    return write
+
+def write_bool(name):
+    def write(builder, b):
+        builder.start(name, dict())
+        builder.data("true" if b else "false")
+        builder.end(name)
+    return write
+
+def write_bbox(name):
+    def write(builder, b):
+        builder.start(name, dict())
+        bbox_xml(builder, b)
+        builder.end(name)
+    return write
+
+def write_string_list(name):
+    def write(builder, words):
+        builder.start(name, dict())
+        for w in words:
+            builder.start("string", dict())
+            builder.data(w)
+            builder.end("string")
+        builder.end(name)
+    return write
+
+def write_dict(name):
+    def write(builder, pairs):
+        builder.start(name, dict())
+        for k, v in pairs.iteritems():
+            builder.start("entry", dict(key=k))
+            builder.data(v)
+            builder.end("entry")
+        builder.end(name)
+    return write
 
 class ResourceInfo(object):
-  """A base class for all resource types managed by the catalog """
+    def __init__(self):
+        self.dom = None
+        self.dirty = dict()
 
-  save_method = "PUT"
-  """The HTTP method to use when saving this object"""
+    def fetch(self):
+        self.dom = self.catalog.get_xml(self.href)
 
-  resource_type = 'abstractResourceType'
-  """A string identifier for the *type* of resource, such as layer or style"""
+    def clear(self):
+        self.dirty = dict()
 
-  def get_url(self, base):
-      return self.href
+    def refresh(self):
+        self.clear()
+        self.fetch()
 
-  def update(self):
-    self.metadata = self.catalog.get_xml(self.href)
-    if self.metadata is None:
-        raise Exception("no xml found at " + self.href)
-    name = self.metadata.find('name')
-    self.name = name.text if name is not None else None
+    def serialize(self, builder):
+        # GeoServer will disable the resource if we omit the <enabled> tag,
+        # so force it into the dirty dict before writing
+        if hasattr(self, "enabled"):
+            self.enabled = self.enabled
 
-  def delete(self):
-    raise NotImplementedError()
+        for k, writer in self.writers.items():
+            if k in self.dirty:
+                writer(builder, self.dirty[k])
 
-  def serialize(self):
-    builder = TreeBuilder()
-    builder.start(self.resource_type, dict())
-    self.encode(builder)
-    builder.end(self.resource_type)
-    return tostring(builder.close())
-
-  def encode(self, builder):
-    """
-    Add appropriate XML nodes to this object.  The builder will be passed in
-    ready to go, with the appropriate top-level node already added.
-    """
-    pass
-
+    def message(self):
+        builder = TreeBuilder()
+        builder.start(self.resource_type, dict())
+        self.serialize(builder)
+        builder.end(self.resource_type)
+        return tostring(builder.close())
+                
 def prepare_upload_bundle(name, data):
     """GeoServer's REST API uses ZIP archives as containers for file formats such
-  as Shapefile and WorldImage which include several 'boxcar' files alongside
-  the main data.  In such archives, GeoServer assumes that all of the relevant
-  files will have the same base name and appropriate extensions, and live in
-  the root of the ZIP archive.  This method produces a zip file that matches
-  these expectations, based on a basename, and a dict of extensions to paths or
-  file-like objects. The client code is responsible for deleting the zip
-  archive when it's done."""
+    as Shapefile and WorldImage which include several 'boxcar' files alongside
+    the main data.  In such archives, GeoServer assumes that all of the relevant
+    files will have the same base name and appropriate extensions, and live in
+    the root of the ZIP archive.  This method produces a zip file that matches
+    these expectations, based on a basename, and a dict of extensions to paths or
+    file-like objects. The client code is responsible for deleting the zip
+    archive when it's done."""
     handle, f = mkstemp() # we don't use the file handle directly. should we?
     if 'shp' in data:
         zip = ZipFile(f, 'w')
