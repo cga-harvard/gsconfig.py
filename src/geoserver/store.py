@@ -1,192 +1,119 @@
-from geoserver import workspace
-from geoserver.resource import FeatureType, Coverage
-from geoserver.support import ResourceInfo, atom_link
+import geoserver.workspace as ws
+from geoserver.resource import featuretype_from_index, coverage_from_index
+from geoserver.support import ResourceInfo, atom_link, xml_property, key_value_pairs, \
+        write_bool, write_dict, write_string
+
+def datastore_from_index(catalog, workspace, node):
+    name = node.find("name")
+    return DataStore(catalog, workspace, name.text)
+
+def coveragestore_from_index(catalog, workspace, node):
+    name = node.find("name")
+    return CoverageStore(catalog, workspace, name.text)
 
 class DataStore(ResourceInfo):
-    """
-    XXX represents a Datastore in GeoServer
-    """
-    resource_type = 'dataStore'
+    resource_type = "dataStore"
+    save_method = "PUT"
 
-    def __init__(self, catalog, node, workspace=None):
-        # self.name = node.find("name").text
+    def __init__(self, catalog, workspace, name):
+        super(DataStore, self).__init__()
+
+        assert isinstance(workspace, ws.Workspace)
+        assert isinstance(name, basestring)
         self.catalog = catalog
-        self.href = atom_link(node)
-
-        self.name = None
-        """
-        A short identifier for this store, unique only within the workspace
-        """
-
-        self.enabled = False
-        """ Should resources from this datastore be served? """
-
         self.workspace = workspace
-        """ What workspace is the datastore a part of? """
+        self.name = name
 
-        self.connection_parameters = dict()
-        """ 
-        The connection parameters for this store, used by GeoServer to
-        connect to the underlying storage.
-        """
+    @property
+    def href(self):
+        return "%s/workspaces/%s/datastores/%s.xml" % (self.catalog.service_url, self.workspace.name, self.name)
 
-        self.featuretypelist_url = None
-        """
-        The FeatureType resources provided by this datastore
-        """
+    enabled = xml_property("enabled", lambda x: x.text == "true")
+    name = xml_property("name")
+    connection_parameters = xml_property("connectionParameters", key_value_pairs)
 
-        self.update()
+    writers = dict(enabled = write_bool("enabled"),
+                   name = write_string("name"),
+                   connectionParameters = write_dict("connectionParameters"))
 
-    def update(self):
-        ResourceInfo.update(self)
-        enabled = self.metadata.find("enabled")
-        ws = self.metadata.find("workspace")
-        connection_parameters = self.metadata.findall("connectionParameters/entry")
-        feature_types = self.metadata.find("featureTypes")
-
-        if enabled is not None and enabled.text == "true":
-            self.enabled = True
-
-        self.workspace = workspace.Workspace(self.catalog, ws) if ws is not None else None
-        self.connection_parameters = dict((entry.attrib['key'], entry.text) for entry in connection_parameters) 
-        self.featuretypelist_url = atom_link(feature_types)
-
-    def encode(self, builder):
-        builder.start("name", dict())
-        builder.data(self.name)
-        builder.end("name")
-
-        builder.start("enabled", dict())
-        if self.enabled:
-            builder.data("true")
-        else:
-            builder.data("false")
-        builder.end("enabled")
-
-        builder.start("connectionParameters", dict())
-        for k, v in self.connection_parameters.iteritems():
-            builder.start("entry", dict(key=k))
-            builder.data(v)
-            builder.end("entry")
-        builder.end("connectionParameters")
-
-    def delete(self): 
-        raise NotImplementedError()
 
     def get_resources(self):
-        doc = self.catalog.get_xml(self.featuretypelist_url)
-        return [FeatureType(self.catalog, n, self) for n in doc.findall("featureType")]
+        res_url = "%s/workspaces/%s/datastores/%s/featuretypes.xml" % (
+                   self.catalog.service_url,
+                   self.workspace.name,
+                   self.name
+                )
+        xml = self.catalog.get_xml(res_url)
+        def ft_from_node(node):
+            return featuretype_from_index(self.catalog, self.workspace, self, node)
 
-    def __repr__(self):
-        wsname = self.workspace.name if self.workspace is not None else None
-        return "DataStore[%s:%s]" % (wsname, self.name)
+        return [ft_from_node(node) for node in xml.findall("featureType")]
 
 class UnsavedDataStore(DataStore):
     save_method = "POST"
 
     def __init__(self, catalog, name, workspace):
-        self.name = name
-        self.workspace = workspace
-        self.href = catalog.service_url + "/workspaces/" + workspace.name + "/datastores/"
-        self.connection_parameters = dict()
-        self.enabled = True
+        super(UnsavedDataStore, self).__init__(catalog, workspace, name)
+        self.dirty.update(dict(
+            name=name, enabled=True, connectionParameters=dict()))
+
+    @property
+    def href(self):
+        return "%s/workspaces/%s/datastores?name=%s" % (self.catalog.service_url, self.workspace.name, self.name)
 
 class CoverageStore(ResourceInfo):
-    """
-    XXX
-    """
     resource_type = 'coverageStore'
+    save_method = "PUT"
 
-    def __init__(self, catalog, node, workspace=None):
-        self.catalog = catalog 
+    def __init__(self, catalog, workspace, name):
+        super(CoverageStore, self).__init__()
 
-        self.href = atom_link(node)
+        assert isinstance(workspace, ws.Workspace)
+        assert isinstance(name, basestring)
 
-        self.name = None
-
-        self.type = None
-
-        self.enabled = False
-
+        self.catalog = catalog
         self.workspace = workspace
+        self.name = name
 
-        self.data_url = None
+    @property
+    def href(self):
+        return "%s/workspaces/%s/coveragestores/%s.xml" % (self.catalog.service_url, self.workspace.name, self.name)
 
-        self.coveragelist_url = None
+    enabled = xml_property("enabled", lambda x: x.text == "true")
+    name = xml_property("name")
+    url = xml_property("url")
+    type = xml_property("type")
+    connection_parameters = xml_property("connectionParameters", key_value_pairs)
 
-        self.update()
-
-        ## if workspace is not None:
-        ##     self.workspace = workspace
-        ## else:
-        ##     name = node.find("name").text
-        ##     href = atom_link(node.find("workspace"))
-        ##     self.workspace = Workspace(self.catalog,name, href)
-
-        ## link = node.find("{http://www.w3.org/2005/Atom}link")
-        ## if link is not None and "href" in link.attrib:
-        ##     self.href = link.attrib["href"]
-        ##     self.update()
-        ## else:
-        ##     self.type = node.find("type").text
-        ##     self.enabled = node.find("enabled").text == "true"
-        ##     self.data_url = node.find("url").text
-        ##     self.coverage_url = atom_link(node.find("coverages"))
-
-    def update(self):
-        ResourceInfo.update(self)
-        type = self.metadata.find('type')
-        enabled = self.metadata.find('enabled')
-        ws = self.metadata.find('workspace')
-        data_url = self.metadata.find('url')
-        coverages = self.metadata.find('coverages')
-
-        if enabled is not None and enabled.text == 'true':
-            self.enabled = True
-        else:
-            self.enabled = False
-
-        self.type = type.text if type is not None else None
-        self.workspace = workspace.Workspace(self.catalog, ws) if ws is not None else None
-        self.data_url = data_url.text if data_url is not None else None
-        self.coveragelist_url = atom_link(coverages)
-
-    def encode(self, builder):
-        builder.start("name", dict())
-        builder.data(self.name)
-        builder.end("name")
-
-        builder.start("type", dict())
-        builder.data(self.type)
-        builder.end("type")
-
-        builder.start("enabled", dict())
-        if self.enabled:
-            builder.data("true")
-        else:
-            builder.data("false")
-        builder.end("enabled")
-
-        builder.start("url", dict())
-        builder.data(self.data_url)
-        builder.end("url")
+    writers = dict(enabled = write_bool("enabled"),
+                   name = write_string("name"),
+                   url = write_string("url"),
+                   type = write_string("type"))
 
 
     def get_resources(self):
-        doc = self.catalog.get_xml(self.coveragelist_url)
-        return [Coverage(self.catalog, n, self) for n in doc.findall("coverage")]
+        res_url = "%s/workspaces/%s/coveragestores/%s/coverages.xml" % (
+                  self.catalog.service_url,
+                  self.workspace.name,
+                  self.name
+                )
 
-    def __repr__(self):
-        wsname = self.workspace.name if self.workspace is not None else None
-        return "CoverageStore[%s:%s]" % (wsname, self.name)
+        xml = self.catalog.get_xml(res_url)
+
+        def cov_from_node(node):
+            name = node.find("name")
+            return coverage_from_index(self.catalog, self.workspace, self, node)
+
+        return [cov_from_node(node) for node in xml.findall("coverage")]
 
 class UnsavedCoverageStore(CoverageStore):
     save_method = "POST"
 
     def __init__(self, catalog, name, workspace):
-        self.name = name
-        self.workspace = workspace
-        self.href = catalog.service_url + "/workspaces/" + workspace.name + "/coveragestores/"
-        self.type = "GeoTIFF"
-        self.enabled = True
-        self.data_url = "file:data/"
+        super(UnsavedCoverageStore, self).__init__(catalog, workspace, name)
+        self.dirty.update(name=name, enabled = True, type="GeoTIFF",
+                url = "file:data/")
+
+    @property
+    def href(self):
+        return "%s/workspaces/%s/coveragestores?name=%s" % (self.catalog.service_url, self.workspace.name, self.name)

@@ -1,5 +1,6 @@
 import unittest
 from geoserver.catalog import Catalog, ConflictingDataError, UploadError
+from geoserver.support import ResourceInfo
 from geoserver.util import shapefile_and_friends
 
 class CatalogTests(unittest.TestCase):
@@ -21,6 +22,7 @@ class CatalogTests(unittest.TestCase):
     self.assertEqual(2, len(self.cat.get_stores(topp)))
     self.assertEqual(2, len(self.cat.get_stores(sf)))
     self.assertEqual("states_shapefile", self.cat.get_store("states_shapefile", topp).name)
+    self.assertEqual("states_shapefile", self.cat.get_store("states_shapefile").name)
     self.assertEqual("states_shapefile", self.cat.get_store("states_shapefile").name)
     self.assertEqual("sfdem", self.cat.get_store("sfdem", sf).name)
     self.assertEqual("sfdem", self.cat.get_store("sfdem").name)
@@ -74,8 +76,12 @@ class CatalogTests(unittest.TestCase):
     message = "Actual layer list did not match expected! (Extras: %s) (Missing: %s)" % (extras, missing)
     self.assert_(len(expected ^ actual) == 0, message)
 
-    self.assert_("states", self.cat.get_layer("states").name)
+    states = self.cat.get_layer("states")
 
+    self.assert_("states", states.name)
+    self.assert_(isinstance(states.resource, ResourceInfo))
+    self.assertEqual(set(s.name for s in states.styles), set(['pophatch', 'polygon']))
+    self.assertEqual(states.default_style.name, "population")
 
   def testStyles(self):
     self.assertEqual(20, len(self.cat.get_styles()))
@@ -92,12 +98,14 @@ class ModifyingTests(unittest.TestCase):
     rs = self.cat.get_resource("bugsites")
     old_abstract = rs.abstract
     new_abstract = "Not the original abstract"
+    enabled = rs.enabled
 
     # Change abstract on server
     rs.abstract = new_abstract
     self.cat.save(rs)
     rs = self.cat.get_resource("bugsites")
     self.assertEqual(new_abstract, rs.abstract)
+    self.assertEqual(enabled, rs.enabled)
 
     # Change keywords on server
     rs.keywords = ["bugsites", "gsconfig"]
@@ -106,6 +114,17 @@ class ModifyingTests(unittest.TestCase):
     rs = self.cat.get_resource("bugsites")
     self.assertEqual(["bugsites", "gsconfig"], rs.keywords)
     self.assertEqual(enabled, rs.enabled)
+    
+    # Change metadata links on server
+    rs.metadata_links = [("text/xml", "TC211", "http://example.com/gsconfig.test.metadata")]
+    enabled = rs.enabled
+    self.cat.save(rs)
+    rs = self.cat.get_resource("bugsites")
+    self.assertEqual(
+            [("text/xml", "TC211", "http://example.com/gsconfig.test.metadata")],
+            rs.metadata_links)
+    self.assertEqual(enabled, rs.enabled)
+
 
     # Restore abstract
     rs.abstract = old_abstract
@@ -123,6 +142,7 @@ class ModifyingTests(unittest.TestCase):
   def testDataStoreModify(self):
     ds = self.cat.get_store("sf")
     self.assertFalse("foo" in ds.connection_parameters)
+    ds.connection_parameters = ds.connection_parameters
     ds.connection_parameters["foo"] = "bar"
     orig_ws = ds.workspace.name
     self.cat.save(ds)
@@ -180,6 +200,17 @@ class ModifyingTests(unittest.TestCase):
     self.cat.save(rs)
     rs = self.cat.get_resource("Arc_Sample")
     self.assertEqual(old_abstract, rs.abstract)
+
+    # Change metadata links on server
+    rs.metadata_links = [("text/xml", "TC211", "http://example.com/gsconfig.test.metadata")]
+    enabled = rs.enabled
+    self.cat.save(rs)
+    rs = self.cat.get_resource("Arc_Sample")
+    self.assertEqual(
+            [("text/xml", "TC211", "http://example.com/gsconfig.test.metadata")],
+            rs.metadata_links)
+    self.assertEqual(enabled, rs.enabled)
+
 
   def testFeatureTypeCreate(self):
     shapefile_plus_sidecars = shapefile_and_friends("test/data/states")
@@ -318,7 +349,20 @@ class ModifyingTests(unittest.TestCase):
     pass
 
   def testDataStoreDelete(self):
-    pass
+    states = self.cat.get_store('states_shapefile')
+    self.assert_(states.enabled == True)
+    states.enabled = False
+    self.assert_(states.enabled == False)
+    self.cat.save(states)
+
+    states = self.cat.get_store('states_shapefile')
+    self.assert_(states.enabled == False)
+
+    states.enabled = True
+    self.cat.save(states)
+
+    states = self.cat.get_store('states_shapefile')
+    self.assert_(states.enabled == True)
 
 if __name__ == "__main__":
   unittest.main()

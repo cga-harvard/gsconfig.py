@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
 import logging
 from geoserver.layer import Layer
-from geoserver.store import DataStore, CoverageStore, UnsavedDataStore, UnsavedCoverageStore
+from geoserver.store import coveragestore_from_index, datastore_from_index, \
+    DataStore, CoverageStore, UnsavedDataStore, UnsavedCoverageStore
 from geoserver.style import Style
 from geoserver.support import prepare_upload_bundle
 from geoserver.layergroup import LayerGroup
-from geoserver.workspace import Workspace
+from geoserver.workspace import workspace_from_index, Workspace
 from os import unlink
 import httplib2
 from zipfile import is_zipfile
@@ -74,7 +75,7 @@ class Catalog(object):
     send a delete request
     XXX [more here]
     """
-    url = object.get_url(self.service_url)
+    url = object.href
 
     if purge:
         url = url + "?purge=true"
@@ -85,11 +86,12 @@ class Catalog(object):
     }
     response = self.http.request(url, "DELETE", headers=headers)
     self._cache.clear()
+
     return response
 
 
   def get_xml(self, url):
-    logger.debug("URL: %s", url)
+    logger.debug("GET %s", url)
     cached_response = self._cache.get(url)
 
     def is_valid(cached_response):
@@ -105,20 +107,22 @@ class Catalog(object):
         else:
             raise FailedRequestError("Tried to make a GET request to %s but got a %d status code: \n%s" % (url, response.status, content))
 
-  def save(self, object):
+  def save(self, obj):
     """
     saves an object to the REST service
 
     gets the object's REST location and the XML from the object,
     then POSTS the request.
     """
-    url = object.get_url(self.service_url)
-    message = object.serialize()
+    url = obj.href
+    message = obj.message()
+
     headers = {
       "Content-type": "application/xml",
       "Accept": "application/xml"
     }
-    response = self.http.request(url, object.save_method, message, headers)
+    logger.debug("%s %s", obj.save_method, obj.href)
+    response = self.http.request(url, obj.save_method, message, headers)
     self._cache.clear()
     return response
 
@@ -151,9 +155,9 @@ class Catalog(object):
           ds_len, cs_len = len(datastores), len(coveragestores)
 
           if ds_len == 1 and cs_len == 0:
-              return DataStore(self, datastores[0])
+              return datastore_from_index(self, workspace, datastores[0])
           elif ds_len == 0 and cs_len == 1:
-              return CoverageStore(self, coveragestores[0])
+              return coveragestore_from_index(self, workspace, coveragestores[0])
           elif ds_len == 0 and cs_len == 0:
               raise FailedRequestError("No store found in " + str(workspace) + " named: " + name)
           else:
@@ -163,8 +167,8 @@ class Catalog(object):
       if workspace is not None:
           ds_list = self.get_xml(workspace.datastore_url)
           cs_list = self.get_xml(workspace.coveragestore_url)
-          datastores = [DataStore(self, n) for n in ds_list.findall("dataStore")]
-          coveragestores = [CoverageStore(self, n) for n in cs_list.findall("coverageStore")]
+          datastores = [datastore_from_index(self, workspace, n) for n in ds_list.findall("dataStore")]
+          coveragestores = [coveragestore_from_index(self, workspace, n) for n in cs_list.findall("coverageStore")]
           return datastores + coveragestores
       else:
           stores = []
@@ -174,7 +178,9 @@ class Catalog(object):
           return stores
 
   def create_datastore(self, name, workspace = None):
-      if workspace is None:
+      if isinstance(workspace, basestring):
+          workspace = self.get_workspace(workspace)
+      elif workspace is None:
           workspace = self.get_default_workspace()
       return UnsavedDataStore(self, name, workspace)
 
@@ -256,18 +262,18 @@ class Catalog(object):
     }
     if  isinstance(data,dict):
         logger.debug('Data is NOT a zipfile')
-        zip = prepare_upload_bundle(name, data)
+        archive = prepare_upload_bundle(name, data)
     else:
         logger.debug('Data is a zipfile')
-        zip = data
-    message = open(zip)
+        archive = data
+    message = open(archive)
     try:
       headers, response = self.http.request(ds_url, "PUT", message, headers)
       self._cache.clear()
       if headers.status != 201:
           raise UploadError(response)
     finally:
-      unlink(zip)
+      unlink(archive)
 
   def create_coveragestore(self, name, data, workspace=None, overwrite=False):
     if not overwrite:
@@ -348,19 +354,17 @@ class Catalog(object):
       resources.extend(self.get_resources(workspace=ws))
     return resources
 
-  def get_layer(self, name=None):
-    description = self.get_xml("%s/layers.xml" % self.service_url)
-    layers = [l for l in description.findall("layer") if l.find("name").text == name]
-    if len(layers) == 0:
-      return None
-    elif len(layers) > 1:
-      raise AmbiguousRequestError("%s does not uniquely identify a layer" % name)
-    else:
-      return Layer(self, layers[0])
+  def get_layer(self, name):
+      try:
+          lyr = Layer(self, name)
+          lyr.fetch()
+          return lyr
+      except FailedRequestError, e:
+          return None
 
   def get_layers(self, resource=None, style=None):
     description = self.get_xml("%s/layers.xml" % self.service_url)
-    lyrs = [Layer(self, l) for l in description.findall("layer")]
+    lyrs = [Layer(self, l.find("name").text) for l in description.findall("layer")]
     if resource is not None:
       lyrs = [l for l in lyrs if l.resource.href == resource.href]
     # TODO: Filter by style
@@ -381,18 +385,15 @@ class Catalog(object):
     return [LayerGroup(self,group) for group in groups.findall("layerGroup")]
 
   def get_style(self, name):
-    description = self.get_xml("%s/styles.xml" % self.service_url)
-    candidates = [l for l in description.findall("style") if l.find("name").text == name]
-    if len(candidates) == 0:
-      return None
-    elif len(candidates) > 1:
-      raise AmbiguousRequestError()
-    else:
-      return Style(self, candidates[0])
+      try:
+          dom = self.get_xml("%s/styles/%s.xml" % (self.service_url, name))
+          return Style(self, dom.find("name").text)
+      except FailedRequestError, e:
+          return None
 
   def get_styles(self):
     description = self.get_xml("%s/styles.xml" % self.service_url)
-    return [Style(self,s) for s in description.findall("style")]
+    return [Style(self, s.find('name').text) for s in description.findall("style")]
 
   def create_style(self, name, data, overwrite = False):
     if overwrite == False and self.get_style(name) is not None:
@@ -436,7 +437,7 @@ class Catalog(object):
 
   def get_workspaces(self):
     description = self.get_xml("%s/workspaces.xml" % self.service_url)
-    return [Workspace(self, node) for node in description.findall("workspace")]
+    return [workspace_from_index(self, node) for node in description.findall("workspace")]
 
   def get_workspace(self, name):
     candidates = filter(lambda x: x.name == name, self.get_workspaces())
@@ -457,12 +458,7 @@ class Catalog(object):
     self.delete(store, purge=True)
 
   def get_default_workspace(self):
-      return Workspace(self, XML("""
-          <workspace>
-              <atom:link xmlns:atom="%s" href="%s/workspaces/default.xml"></atom:link>
-          </workspace>
-      """ % ("http://www.w3.org/2005/Atom", self.service_url)
-      ))
+      return Workspace(self, "default")
 
   def set_default_workspace(self):
     raise NotImplementedError()
