@@ -201,7 +201,7 @@ class Catalog(object):
 
       params = dict()
       if overwrite:
-          params["overwrite"] = True
+          params["update"] = "overwrite"
       if charset is not None:
           params["charset"] = charset
 
@@ -216,6 +216,7 @@ class Catalog(object):
       headers = { 'Content-Type': 'application/zip', 'Accept': 'application/xml' }
       url = "%s/workspaces/%s/datastores/%s/file.shp%s" % (
               self.service_url, store.workspace.name, store.name, params)
+
 
       try:
           headers, response = self.http.request(url, "PUT", message, headers)
