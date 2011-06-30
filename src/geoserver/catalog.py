@@ -201,7 +201,7 @@ class Catalog(object):
 
       params = dict()
       if overwrite:
-          params["overwrite"] = True
+          params["update"] = "overwrite"
       if charset is not None:
           params["charset"] = charset
 
