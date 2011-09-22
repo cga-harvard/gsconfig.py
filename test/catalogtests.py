@@ -1,6 +1,7 @@
 import unittest
 from geoserver.catalog import Catalog, ConflictingDataError, UploadError
 from geoserver.support import ResourceInfo
+from geoserver.layergroup import LayerGroup
 from geoserver.util import shapefile_and_friends
 
 class CatalogTests(unittest.TestCase):
@@ -82,6 +83,21 @@ class CatalogTests(unittest.TestCase):
     self.assert_(isinstance(states.resource, ResourceInfo))
     self.assertEqual(set(s.name for s in states.styles), set(['pophatch', 'polygon']))
     self.assertEqual(states.default_style.name, "population")
+
+  def testLayerGroups(self):
+    expected = set(["tasmania", "tiger-ny", "spearfish"])
+    actual = set(l.name for l in self.cat.get_layergroups())
+    missing = expected - actual
+    extras = actual - expected
+    message = "Actual layergroup list did not match expected! (Extras: %s) (Missing: %s)" % (extras, missing)
+    self.assert_(len(expected ^ actual) == 0, message)
+
+    tas = self.cat.get_layergroup("tasmania")
+
+    self.assert_("tasmania", tas.name)
+    self.assert_(isinstance(tas, LayerGroup))
+    self.assertEqual(tas.layers, ['tasmania_state_boundaries', 'tasmania_water_bodies', 'tasmania_roads', 'tasmania_cities'], tas.layers)
+    self.assertEqual(tas.styles, [None, None, None, None], tas.styles)
 
   def testStyles(self):
     self.assertEqual(20, len(self.cat.get_styles()))
@@ -210,6 +226,32 @@ class ModifyingTests(unittest.TestCase):
             [("text/xml", "TC211", "http://example.com/gsconfig.test.metadata")],
             rs.metadata_links)
     self.assertEqual(enabled, rs.enabled)
+
+    srs_before = set(['EPSG:4326'])
+    srs_after = set(['EPSG:4326', 'EPSG:3785'])
+    formats = set(['ARCGRID', 'ARCGRID-GZIP', 'GEOTIFF', 'PNG', 'GIF', 'TIFF'])
+    formats_after = set(["PNG", "GIF", "TIFF"])
+
+    # set and save request_srs_list
+    self.assertEquals(set(rs.request_srs_list), srs_before, str(rs.request_srs_list))
+    rs.request_srs_list = rs.request_srs_list + ['EPSG:3785']
+    self.cat.save(rs)
+    rs = self.cat.get_resource("Arc_Sample")
+    self.assertEquals(set(rs.request_srs_list), srs_after, str(rs.request_srs_list))
+
+    # set and save response_srs_list
+    self.assertEquals(set(rs.response_srs_list), srs_before, str(rs.response_srs_list))
+    rs.response_srs_list = rs.response_srs_list + ['EPSG:3785']
+    self.cat.save(rs)
+    rs = self.cat.get_resource("Arc_Sample")
+    self.assertEquals(set(rs.response_srs_list), srs_after, str(rs.response_srs_list))
+
+    # set and save supported_formats
+    self.assertEquals(set(rs.supported_formats), formats, str(rs.supported_formats))
+    rs.supported_formats = ["PNG", "GIF", "TIFF"]
+    self.cat.save(rs)
+    rs = self.cat.get_resource("Arc_Sample")
+    self.assertEquals(set(rs.supported_formats), formats_after, str(rs.supported_formats))
 
 
   def testFeatureTypeCreate(self):
@@ -377,6 +419,20 @@ class ModifyingTests(unittest.TestCase):
 
     states = self.cat.get_store('states_shapefile')
     self.assert_(states.enabled == True)
+
+  def testLayerGroupSave(self):
+    tas = self.cat.get_layergroup("tasmania")
+
+    self.assertEqual(tas.layers, ['tasmania_state_boundaries', 'tasmania_water_bodies', 'tasmania_roads', 'tasmania_cities'], tas.layers)
+    self.assertEqual(tas.styles, [None, None, None, None], tas.styles)
+
+    tas.layers = tas.layers[:-1]
+    tas.styles = tas.styles[:-1]
+
+    self.cat.save(tas)
+
+    self.assertEqual(tas.layers, ['tasmania_state_boundaries', 'tasmania_water_bodies', 'tasmania_roads'], tas.layers)
+    self.assertEqual(tas.styles, [None, None, None], tas.styles)
 
 if __name__ == "__main__":
   unittest.main()

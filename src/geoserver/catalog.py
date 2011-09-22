@@ -5,7 +5,7 @@ from geoserver.store import coveragestore_from_index, datastore_from_index, \
     DataStore, CoverageStore, UnsavedDataStore, UnsavedCoverageStore
 from geoserver.style import Style
 from geoserver.support import prepare_upload_bundle
-from geoserver.layergroup import LayerGroup
+from geoserver.layergroup import LayerGroup, UnsavedLayerGroup
 from geoserver.workspace import workspace_from_index, Workspace
 from os import unlink
 import httplib2
@@ -84,11 +84,13 @@ class Catalog(object):
       "Content-type": "application/xml",
       "Accept": "application/xml"
     }
-    response = self.http.request(url, "DELETE", headers=headers)
+    response, content = self.http.request(url, "DELETE", headers=headers)
     self._cache.clear()
 
-    return response
-
+    if response.status == 200:
+        return (response, content)
+    else:
+        raise FailedRequestError("Tried to make a DELETE request to %s but got a %d status code: \n%s" % (url, response.status, content))
 
   def get_xml(self, url):
     logger.debug("GET %s", url)
@@ -97,13 +99,23 @@ class Catalog(object):
     def is_valid(cached_response):
         return cached_response is not None and datetime.now() - cached_response[0] < timedelta(seconds=5)
 
+    def parse_or_raise(xml):
+        try:
+            return XML(xml)
+        except SyntaxError, e:
+            raise Exception(
+                "GeoServer gave non-XML response for [GET %s]: %s" % (
+                    url, xml),
+                e)
+
     if is_valid(cached_response):
-        return XML(cached_response[1])
+            raw_text = cached_response[1]
+            return parse_or_raise(cached_response[1])
     else:
         response, content = self.http.request(url)
         if response.status == 200:
             self._cache[url] = (datetime.now(), content)
-            return XML(content)
+            return parse_or_raise(content)
         else:
             raise FailedRequestError("Tried to make a GET request to %s but got a %d status code: \n%s" % (url, response.status, content))
 
@@ -377,13 +389,24 @@ class Catalog(object):
   def get_map(self, id=None, name=None):
     raise NotImplementedError()
 
-  def get_layergroup(self, id=None, name=None):
-    group = self.get_xml("%s/layergroups/%s.xml" % (self.service_url, name))
-    return LayerGroup(self, group.find("name").text)
+  def get_layergroup(self, name=None):
+      try: 
+          group = self.get_xml("%s/layergroups/%s.xml" % (
+              self.service_url, name))
+          return LayerGroup(self, group.find("name").text)
+      except FailedRequestError, e:
+          return None
 
   def get_layergroups(self):
     groups = self.get_xml("%s/layergroups.xml" % self.service_url)
-    return [LayerGroup(self,group) for group in groups.findall("layerGroup")]
+    return [LayerGroup(self, g.find("name").text) for g in groups.findall("layerGroup")]
+
+  def create_layergroup(self, name, layers = (), styles = (), bounds = None):
+      if any(g.name == name for g in self.get_layergroups()):
+          raise ConflictingDataError("Workspace named %s already exists!" %
+                  name)
+      else:
+          return UnsavedLayerGroup(self, name, layers, styles, bounds)
 
   def get_style(self, name):
       try:
