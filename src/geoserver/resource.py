@@ -1,7 +1,7 @@
 from geoserver.support import ResourceInfo, xml_property, write_string, \
         atom_link, atom_link_xml, bbox, bbox_xml, write_bbox, \
         string_list, write_string_list, attribute_list, write_bool, \
-        FORCE_NATIVE, FORCE_DECLARED, REPROJECT
+        key_value_pairs, key_value_pair_test, FORCE_NATIVE, FORCE_DECLARED, REPROJECT
 from xml.etree.ElementTree import tostring
 
 def md_link(node):
@@ -77,6 +77,7 @@ class FeatureType(ResourceInfo):
     projection_policy = xml_property("projectionPolicy")
     keywords = xml_property("keywords", string_list)
     attributes = xml_property("attributes", attribute_list)
+    metadata = xml_property("metadata", key_value_pair_test)
     metadata_links = xml_property("metadataLinks", metadata_link_list)
 
     writers = dict(

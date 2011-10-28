@@ -73,6 +73,10 @@ def key_value_pairs(node):
     if node is not None:
         return dict((entry.attrib['key'], entry.text) for entry in node.findall("entry"))
 
+def key_value_pair_test(node):
+    if node is not None:
+        return dict((entry.attrib['key'], entry) for entry in node.findall("entry"))
+
 def write_string(name):
     def write(builder, value):
         builder.start(name, dict())

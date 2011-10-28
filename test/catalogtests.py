@@ -434,5 +434,25 @@ class ModifyingTests(unittest.TestCase):
     self.assertEqual(tas.layers, ['tasmania_state_boundaries', 'tasmania_water_bodies', 'tasmania_roads'], tas.layers)
     self.assertEqual(tas.styles, [None, None, None], tas.styles)
 
+  def testCreatePostgresLayer(self):
+    self.cat.create_workspace("test_postgres", "http://example.com/test_postgres")
+    ds = self.cat.create_datastore("test_postgres", "test_postgres")
+    ds.connection_parameters.update(
+            host="localhost", port="5432", database="db", user="postgres",
+            passwd="password", dbtype="postgis")
+    response = self.cat.save(ds)
+    layer = self.cat.create_native_layer(
+        workspace='test_postgres',
+        store='test_postgres', 
+        name='annotations',
+        native_name='annotations',
+        title='Annotations',
+        srs='EPSG:4326',
+        attributes=dict(
+            the_geom='com.vividsolutions.jts.geom.Point',
+            description='java.lang.String',
+            timestamp='java.util.Date'))
+    self.assert_(isinstance(layer, ResourceInfo))
+
 if __name__ == "__main__":
   unittest.main()

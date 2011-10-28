@@ -28,6 +28,9 @@ class AmbiguousRequestError(Exception):
 class FailedRequestError(Exception):
     pass
 
+class InvalidAttributesError(Exception):
+    pass
+
 class Catalog(object):
   """
   The GeoServer catalog represents all of the information in the GeoServer
@@ -134,9 +137,9 @@ class Catalog(object):
       "Accept": "application/xml"
     }
     logger.debug("%s %s", obj.save_method, obj.href)
-    response = self.http.request(url, obj.save_method, message, headers)
+    headers, response = self.http.request(url, obj.save_method, message, headers)
     self._cache.clear()
-    return response
+    if headers.status < 200 or headers.status > 299: raise UploadError(response) 
 
   def get_store(self, name, workspace=None):
       #stores = [s for s in self.get_stores(workspace) if s.name == name]
@@ -188,6 +191,80 @@ class Catalog(object):
               a = self.get_stores(ws)
               stores.extend(a)
           return stores
+
+  def create_native_layer(self, workspace, store, name,
+          native_name, title, srs, attributes):
+    """
+    Physically create a layer in one of GeoServer's datastores.
+    For example, this will actually create a table in a Postgis store.
+
+    Parameters include:
+    workspace - the Workspace object or name of the workspace of the store to
+       use
+    store - the Datastore object or name of the store to use
+    name - the published name of the store
+    native_name - the name used in the native storage format (such as a
+        filename or database table name)
+    title - the title for the created featuretype configuration
+    srs - the SRID for the SRS to use (like "EPSG:4326" for lon/lat)
+    attributes - a dict specifying the names and types of the attributes for
+       the new table.  Types should be specified using Java class names:
+
+       * boolean = java.lang.Boolean
+       * byte = java.lang.Byte
+       * timestamp = java.util.Date
+       * double = java.lang.Double
+       * float = java.lang.Float
+       * integer = java.lang.Integer
+       * long = java.lang.Long
+       * short = java.lang.Short
+       * string = java.lang.String
+    """
+    if isinstance(workspace, basestring):
+        ws = self.get_workspace(workspace)
+    elif ws is None:
+        ws = self.get_default_workspace()
+    ds = self.get_store(store, ws)
+    existing_layer = self.get_resource(name, ds, ws) 
+    if existing_layer is not None:
+        msg = "There is already a layer named %s in %s" % (name, workspace)
+        raise ConflictingDataError(msg)
+    if not isinstance(attributes, dict) or len(attributes) < 1:
+        msg = "The specified attributes are invalid"
+        raise InvalidAttributesError(msg)
+    else:
+        has_geom = False
+        attributes_block = "<attributes>"
+        for k, v in attributes.items():
+            if v.find("com.vividsolutions.jts.geom") >= 0:
+                has_geom = True
+            attributes_block += ("<attribute>"
+                "<name>{name}</name>"
+                "<binding>{binding}</binding>"
+                "</attribute>").format(name=k, binding=v)
+        attributes_block += "</attributes>"
+        
+        if has_geom == False:
+            msg = "Geometryless layers are not currently supported"
+            raise InvalidAttributesError(msg)
+
+    xml = ("<featureType>"
+            "<name>{name}</name>"
+            "<nativeName>{native_name}</nativeName>"
+            "<title>title</title>"
+            "<srs>{srs}</srs>"
+            "{attributes}"
+            "</featureType>").format(name=name, native_name=native_name, 
+                                        title=title, srs=srs,
+                                        attributes=attributes_block)
+    headers = { "Content-Type": "application/xml" }
+    url = '%s/workspaces/%s/datastores/%s/featuretypes' % (self.service_url, workspace, store)
+
+    headers, response = self.http.request(url, "POST", xml, headers)
+    assert 200 <= headers.status < 300, "Tried to create PostGIS Layer but got " + str(headers.status) + ": " + response
+    self._cache.clear()
+    return self.get_resource(name)
+
 
   def create_datastore(self, name, workspace = None):
       if isinstance(workspace, basestring):
