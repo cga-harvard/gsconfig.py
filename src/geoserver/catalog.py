@@ -222,44 +222,56 @@ class Catalog(object):
     """
     if isinstance(workspace, basestring):
         ws = self.get_workspace(workspace)
-    elif ws is None:
+    elif workspace is None:
         ws = self.get_default_workspace()
     ds = self.get_store(store, ws)
     existing_layer = self.get_resource(name, ds, ws) 
     if existing_layer is not None:
         msg = "There is already a layer named %s in %s" % (name, workspace)
         raise ConflictingDataError(msg)
-    if not isinstance(attributes, dict) or len(attributes) < 1:
+    if len(attributes) < 1:
         msg = "The specified attributes are invalid"
         raise InvalidAttributesError(msg)
-    else:
-        has_geom = False
-        attributes_block = "<attributes>"
-        for k, v in attributes.items():
-            if v.find("com.vividsolutions.jts.geom") >= 0:
-                has_geom = True
-            attributes_block += ("<attribute>"
-                "<name>{name}</name>"
-                "<binding>{binding}</binding>"
-                "</attribute>").format(name=k, binding=v)
-        attributes_block += "</attributes>"
-        
-        if has_geom == False:
-            msg = "Geometryless layers are not currently supported"
-            raise InvalidAttributesError(msg)
+
+    has_geom = False
+    attributes_block = "<attributes>"
+    empty_opts = {}
+    for spec in attributes:
+        if len(spec) == 2:
+            att_name, binding = spec
+            opts = empty_opts
+        elif len(spec) == 3:
+            att_name, binding, opts = spec
+        else:
+            raise InvalidAttributesError("expected tuple of (name,binding,dict?)")
+
+        nillable = opts.get("nillable",False)
+
+        if binding.find("com.vividsolutions.jts.geom") >= 0:
+            has_geom = True
+
+        attributes_block += ("<attribute>"
+            "<name>{name}</name>"
+            "<binding>{binding}</binding>"
+            "<nillable>{nillable}</nillable>"
+            "</attribute>").format(name=att_name, binding=binding, nillable=nillable)
+    attributes_block += "</attributes>"
+
+    if has_geom == False:
+        msg = "Geometryless layers are not currently supported"
+        raise InvalidAttributesError(msg)
 
     xml = ("<featureType>"
             "<name>{name}</name>"
             "<nativeName>{native_name}</nativeName>"
-            "<title>title</title>"
+            "<title>{title}</title>"
             "<srs>{srs}</srs>"
             "{attributes}"
             "</featureType>").format(name=name, native_name=native_name, 
                                         title=title, srs=srs,
                                         attributes=attributes_block)
     headers = { "Content-Type": "application/xml" }
-    url = '%s/workspaces/%s/datastores/%s/featuretypes' % (self.service_url, workspace, store)
-
+    url = '%s/workspaces/%s/datastores/%s/featuretypes' % (self.service_url, ws.name, store)
     headers, response = self.http.request(url, "POST", xml, headers)
     assert 200 <= headers.status < 300, "Tried to create PostGIS Layer but got " + str(headers.status) + ": " + response
     self._cache.clear()
