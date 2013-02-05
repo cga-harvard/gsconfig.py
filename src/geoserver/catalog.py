@@ -425,23 +425,24 @@ class Catalog(object):
 
   def get_resource(self, name, store=None, workspace=None):
     if store is not None:
-      workspace = store.workspace
-      try:
-          candidate = FeatureType(self, workspace, store, name)
-          candidate.title #throw FailedRequestError if not found
-          return candidate
-      except FailedRequestError:
-          return None 
-      except Exception, e:
-          raise e
-#  DO NOT DO THIS (get all resources in store and then filter out) - too many!
-#      candidates = filter(lambda x: x.name == name, self.get_resources(store))
-#      if len(candidates) == 0:
-#        return None
-#      elif len(candidates) > 1:
-#        raise AmbiguousRequestError
-#      else:
-#        return candidates[0]
+        if store.resource_type == "dataStore" and store.name != name:
+            workspace = store.workspace
+            try:
+                candidate = FeatureType(self, workspace, store, name)
+                candidate.title #throw FailedRequestError if not found
+                return candidate
+            except FailedRequestError:
+                return None 
+            except Exception, e:
+                raise e
+        else:
+            candidates = filter(lambda x: x.name == name, self.get_resources(store))
+            if len(candidates) == 0:
+                return None
+            elif len(candidates) > 1:
+                raise AmbiguousRequestError
+            else:
+                return candidates[0]
 
     if workspace is not None:
       for store in self.get_stores(workspace):
