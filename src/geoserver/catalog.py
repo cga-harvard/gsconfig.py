@@ -3,6 +3,7 @@ import logging
 from geoserver.layer import Layer
 from geoserver.store import coveragestore_from_index, datastore_from_index, \
     DataStore, CoverageStore, UnsavedDataStore, UnsavedCoverageStore
+from geoserver.resource import FeatureType
 from geoserver.style import Style
 from geoserver.support import prepare_upload_bundle
 from geoserver.layergroup import LayerGroup, UnsavedLayerGroup
@@ -424,13 +425,23 @@ class Catalog(object):
 
   def get_resource(self, name, store=None, workspace=None):
     if store is not None:
-      candidates = filter(lambda x: x.name == name, self.get_resources(store))
-      if len(candidates) == 0:
-        return None
-      elif len(candidates) > 1:
-        raise AmbiguousRequestError
-      else:
-        return candidates[0]
+      workspace = store.workspace
+      try:
+          candidate = FeatureType(self, workspace, store, name)
+          candidate.title #throw FailedRequestError if not found
+          return candidate
+      except FailedRequestError:
+          return None 
+      except Exception, e:
+          raise e
+#  DO NOT DO THIS (get all resources in store and then filter out) - too many!
+#      candidates = filter(lambda x: x.name == name, self.get_resources(store))
+#      if len(candidates) == 0:
+#        return None
+#      elif len(candidates) > 1:
+#        raise AmbiguousRequestError
+#      else:
+#        return candidates[0]
 
     if workspace is not None:
       for store in self.get_stores(workspace):
