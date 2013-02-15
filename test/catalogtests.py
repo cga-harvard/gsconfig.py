@@ -448,10 +448,10 @@ class ModifyingTests(unittest.TestCase):
         native_name='annotations',
         title='Annotations',
         srs='EPSG:4326',
-        attributes=dict(
-            the_geom='com.vividsolutions.jts.geom.Point',
-            description='java.lang.String',
-            timestamp='java.util.Date'))
+        attributes=[
+            ('the_geom','com.vividsolutions.jts.geom.Point'),
+            ('description','java.lang.String'),
+            ('timestamp','java.util.Date')])
     self.assert_(isinstance(layer, ResourceInfo))
 
 if __name__ == "__main__":
