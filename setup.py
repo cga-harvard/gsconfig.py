@@ -3,7 +3,7 @@
 from setuptools import setup, find_packages
 
 setup(name = "gsconfig.py",
-    version = "1.0",
+    version = "1.0wm",
     description = "GeoServer REST Configuration Client",
     keywords = "GeoServer REST Configuration",
     license = "MIT",
