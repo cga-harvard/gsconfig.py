@@ -274,7 +274,7 @@ class Catalog(object):
                                         title=title, srs=srs,
                                         attributes=attributes_block)
     headers = { "Content-Type": "application/xml" }
-    url = '%s/workspaces/%s/datastores/%s/featuretypes' % (self.service_url, ws.name, store)
+    url = '%s/workspaces/%s/datastores/%s/featuretypes?charset=UTF-8' % (self.service_url, ws.name, store)
     headers, response = self.http.request(url, "POST", xml, headers)
     assert 200 <= headers.status < 300, "Tried to create PostGIS Layer but got " + str(headers.status) + ": " + response
     self._cache.clear()
