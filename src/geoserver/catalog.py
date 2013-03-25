@@ -270,8 +270,8 @@ class Catalog(object):
             "<title>{title}</title>"
             "<srs>{srs}</srs>"
             "{attributes}"
-            "</featureType>").format(name=name, native_name=native_name, 
-                                        title=title, srs=srs,
+            "</featureType>").format(name=name.encode('UTF-8','strict'), native_name=native_name.encode('UTF-8','strict'), 
+                                        title=title.encode('UTF-8','strict'), srs=srs,
                                         attributes=attributes_block)
     headers = { "Content-Type": "application/xml" }
     url = '%s/workspaces/%s/datastores/%s/featuretypes?charset=UTF-8' % (self.service_url, ws.name, store)
