@@ -1,8 +1,5 @@
-from geoserver.support import ResourceInfo, xml_property, write_string, \
-        atom_link, atom_link_xml, bbox, bbox_xml, write_bbox, \
-        string_list, write_string_list, attribute_list, write_bool, \
-        key_value_pairs, key_value_pair_test, FORCE_NATIVE, FORCE_DECLARED, REPROJECT
-from xml.etree.ElementTree import tostring
+from geoserver.support import ResourceInfo, xml_property, write_string, bbox, \
+    write_bbox, string_list, write_string_list, attribute_list, write_bool, url
 
 def md_link(node):
     """Extract a metadata link tuple from an xml node"""
@@ -22,12 +19,15 @@ def write_metadata_link_list(name):
     def write(builder, md_links):
         builder.start(name, dict())
         for (mime, md_type, content_url) in md_links:
+            # geoserver supports only three mime
+            if mime not in ['ISO19115:2003', 'FGDC', 'TC211']:
+                mime = 'other'
             builder.start("metadataLink", dict())
             builder.start("type", dict())
-            builder.data(mime)
+            builder.data(md_type)
             builder.end("type")
             builder.start("metadataType", dict())
-            builder.data(md_type)
+            builder.data(mime)
             builder.end("metadataType")
             builder.start("content", dict())
             builder.data(content_url)
@@ -50,10 +50,10 @@ class FeatureType(ResourceInfo):
 
     def __init__(self, catalog, workspace, store, name):
         super(FeatureType, self).__init__()
-  
+
         assert isinstance(store, ResourceInfo)
         assert isinstance(name, basestring)
-        
+
         self.catalog = catalog
         self.workspace = workspace
         self.store = store
@@ -61,12 +61,10 @@ class FeatureType(ResourceInfo):
 
     @property
     def href(self):
-        return "%s/workspaces/%s/datastores/%s/featuretypes/%s.xml" % (
-                self.catalog.service_url,
-                self.workspace.name,
-                self.store.name,
-                self.name
-                )
+        return url(self.catalog.service_url,
+            ["workspaces", self.workspace.name,
+             "datastores", self.store.name,
+             "featuretypes", self.name + ".xml"])
 
     title = xml_property("title")
     abstract = xml_property("abstract")
@@ -77,7 +75,6 @@ class FeatureType(ResourceInfo):
     projection_policy = xml_property("projectionPolicy")
     keywords = xml_property("keywords", string_list)
     attributes = xml_property("attributes", attribute_list)
-    metadata = xml_property("metadata", key_value_pair_test)
     metadata_links = xml_property("metadataLinks", metadata_link_list)
 
     writers = dict(
@@ -93,23 +90,23 @@ class FeatureType(ResourceInfo):
             )
 
 class CoverageDimension(object):
-    def __init__(self, name, description, range):
+    def __init__(self, name, description, dimension_range):
         self.name = name
         self.description = description
-        self.range = range
+        self.dimension_range = dimension_range
 
 def coverage_dimension(node):
     name = node.find("name")
     name = name.text if name is not None else None
     description = node.find("description")
     description = description.text if description is not None else None
-    min = node.find("range/min")
-    max = node.find("range/max")
-    range = None
+    range_min = node.find("range/min")
+    range_max = node.find("range/max")
+    dimension_range = None
     if None not in [min, max]:
-        range = float(min.text), float(max.text)
+        dimension_range = float(range_min.text), float(range_max.text)
     if None not in [name, description]:
-        return CoverageDimension(name, description, range)
+        return CoverageDimension(name, description, dimension_range)
     else:
         return None # should we bomb out more spectacularly here?
 
@@ -145,12 +142,10 @@ class Coverage(ResourceInfo):
 
     @property
     def href(self):
-        return "%s/workspaces/%s/coveragestores/%s/coverages/%s.xml" % (
-                self.catalog.service_url,
-                self.workspace.name,
-                self.store.name,
-                self.name
-                )
+        return url(self.catalog.service_url,
+            ["workspaces", self.workspace.name,
+             "coveragestores", self.store.name,
+             "coverages", self.name + ".xml"])
 
     resource_type = "coverage"
     save_method = "PUT"

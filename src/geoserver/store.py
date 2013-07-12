@@ -1,7 +1,7 @@
 import geoserver.workspace as ws
 from geoserver.resource import featuretype_from_index, coverage_from_index
-from geoserver.support import ResourceInfo, atom_link, xml_property, key_value_pairs, \
-        write_bool, write_dict, write_string
+from geoserver.support import ResourceInfo, xml_property, key_value_pairs, \
+        write_bool, write_dict, write_string, url
 
 def datastore_from_index(catalog, workspace, node):
     name = node.find("name")
@@ -26,7 +26,8 @@ class DataStore(ResourceInfo):
 
     @property
     def href(self):
-        return "%s/workspaces/%s/datastores/%s.xml" % (self.catalog.service_url, self.workspace.name, self.name)
+        return url(self.catalog.service_url, 
+            ["workspaces", self.workspace.name, "datastores", self.name + ".xml"])
 
     enabled = xml_property("enabled", lambda x: x.text == "true")
     name = xml_property("name")
@@ -38,11 +39,8 @@ class DataStore(ResourceInfo):
 
 
     def get_resources(self):
-        res_url = "%s/workspaces/%s/datastores/%s/featuretypes.xml" % (
-                   self.catalog.service_url,
-                   self.workspace.name,
-                   self.name
-                )
+        res_url = url(self.catalog.service_url,
+            ["workspaces", self.workspace.name, "datastores", self.name, "featuretypes.xml"])
         xml = self.catalog.get_xml(res_url)
         def ft_from_node(node):
             return featuretype_from_index(self.catalog, self.workspace, self, node)
@@ -59,7 +57,10 @@ class UnsavedDataStore(DataStore):
 
     @property
     def href(self):
-        return "%s/workspaces/%s/datastores?name=%s" % (self.catalog.service_url, self.workspace.name, self.name)
+        path = [ "workspaces",
+                 self.workspace.name, "datastores"]
+        query = dict(name=self.name)
+        return url(self.catalog.service_url, path, query)
 
 class CoverageStore(ResourceInfo):
     resource_type = 'coverageStore'
@@ -77,7 +78,8 @@ class CoverageStore(ResourceInfo):
 
     @property
     def href(self):
-        return "%s/workspaces/%s/coveragestores/%s.xml" % (self.catalog.service_url, self.workspace.name, self.name)
+        return url(self.catalog.service_url,
+            ["workspaces", self.workspace.name, "coveragestores", self.name + ".xml"])
 
     enabled = xml_property("enabled", lambda x: x.text == "true")
     name = xml_property("name")
@@ -91,16 +93,12 @@ class CoverageStore(ResourceInfo):
 
 
     def get_resources(self):
-        res_url = "%s/workspaces/%s/coveragestores/%s/coverages.xml" % (
-                  self.catalog.service_url,
-                  self.workspace.name,
-                  self.name
-                )
+        res_url = url(self.catalog.service_url,
+            ["workspaces", self.workspace.name, "coveragestores", self.name, "coverages.xml"])
 
         xml = self.catalog.get_xml(res_url)
 
         def cov_from_node(node):
-            name = node.find("name")
             return coverage_from_index(self.catalog, self.workspace, self, node)
 
         return [cov_from_node(node) for node in xml.findall("coverage")]
@@ -115,4 +113,5 @@ class UnsavedCoverageStore(CoverageStore):
 
     @property
     def href(self):
-        return "%s/workspaces/%s/coveragestores?name=%s" % (self.catalog.service_url, self.workspace.name, self.name)
+        return url(self.catalog.service_url,
+            ["workspaces", self.workspace.name, "coveragestores"], dict(name=self.name))

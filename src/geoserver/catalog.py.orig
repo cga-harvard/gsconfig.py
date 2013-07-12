@@ -28,9 +28,6 @@ class AmbiguousRequestError(Exception):
 class FailedRequestError(Exception):
     pass
 
-class InvalidAttributesError(Exception):
-    pass
-
 def _name(named):
     """Get the name out of an object.  This varies based on the type of the input:
        * the "name" of a string is itself
@@ -47,6 +44,52 @@ def _name(named):
         raise ValueError("Can't interpret %s as a name or a configuration object" % named)
 
 class Catalog(object):
+<<<<<<< HEAD
+=======
+  """
+  The GeoServer catalog represents all of the information in the GeoServer
+  configuration.  This includes:
+  - Stores of geospatial data
+  - Resources, or individual coherent datasets within stores
+  - Styles for resources
+  - Layers, which combine styles with resources to create a visible map layer
+  - LayerGroups, which alias one or more layers for convenience
+  - Workspaces, which provide logical grouping of Stores
+  - Maps, which provide a set of OWS services with a subset of the server's
+    Layers
+  - Namespaces, which provide unique identifiers for resources
+  """
+
+  def __init__(self, url, username="admin", password="geoserver",ssl_certificate_validation=True):
+    self.service_url = url
+    self.ssl_certificate_validation = ssl_certificate_validation
+    if self.service_url.endswith("/"):
+        self.service_url = self.service_url.strip("/")
+    self.http = httplib2.Http(disable_ssl_certificate_validation=not ssl_certificate_validation)
+    self.username = username
+    self.password = password
+    self.http.add_credentials(self.username, self.password)
+    netloc = urlparse(url).netloc
+    self.http.authorizations.append(
+        httplib2.BasicAuthentication(
+            (username, password),
+            netloc,
+            url,
+            {},
+            None,
+            None,
+            self.http
+            ))
+    self._cache = dict()
+
+  def add(self, object):
+    raise NotImplementedError()
+
+  def remove(self, object):
+    raise NotImplementedError()
+
+  def delete(self, object, purge=False):
+>>>>>>> 611f990afcac059cfe2b5dbf7e93a2abf4335c55
     """
     The GeoServer catalog represents all of the information in the GeoServer
     configuration.    This includes:
@@ -61,12 +104,11 @@ class Catalog(object):
     - Namespaces, which provide unique identifiers for resources
     """
 
-    def __init__(self, service_url, username="admin", password="geoserver", disable_ssl_certificate_validation=False):
+    def __init__(self, service_url, username="admin", password="geoserver"):
         self.service_url = service_url
         if self.service_url.endswith("/"):
             self.service_url = self.service_url.strip("/")
-        self.http = httplib2.Http(
-            disable_ssl_certificate_validation=disable_ssl_certificate_validation)
+        self.http = httplib2.Http()
         self.username = username
         self.password = password
         self.http.add_credentials(self.username, self.password)
@@ -143,12 +185,6 @@ class Catalog(object):
             else:
                 raise FailedRequestError("Tried to make a GET request to %s but got a %d status code: \n%s" % (url, response.status, content))
 
-    def reload(self):
-        reload_url = url(self.service_url, ['reload'])
-        response = self.http.request(reload_url, "POST")
-        self._cache.clear()
-        return response
-
     def save(self, obj):
         """
         saves an object to the REST service
@@ -171,92 +207,6 @@ class Catalog(object):
             raise FailedRequestError("Error code (%s) from GeoServer: %s" %
                 (headers['status'], body))
         return response
-
-    def create_native_layer(self, workspace, store, name,
-          native_name, title, srs, attributes):
-        """
-        Physically create a layer in one of GeoServer's datastores.
-        For example, this will actually create a table in a Postgis store.
-
-        Parameters include:
-        workspace - the Workspace object or name of the workspace of the store to
-           use
-        store - the Datastore object or name of the store to use
-        name - the published name of the store
-        native_name - the name used in the native storage format (such as a
-                filename or database table name)
-        title - the title for the created featuretype configuration
-        srs - the SRID for the SRS to use (like "EPSG:4326" for lon/lat)
-        attributes - a dict specifying the names and types of the attributes for
-           the new table.  Types should be specified using Java class names:
-
-           * boolean = java.lang.Boolean
-           * byte = java.lang.Byte
-           * timestamp = java.util.Date
-           * double = java.lang.Double
-           * float = java.lang.Float
-           * integer = java.lang.Integer
-           * long = java.lang.Long
-           * short = java.lang.Short
-           * string = java.lang.String
-        """
-        if isinstance(workspace, basestring):
-                ws = self.get_workspace(workspace)
-        elif workspace is None:
-                ws = self.get_default_workspace()
-        ds = self.get_store(store, ws)
-        existing_layer = self.get_resource(name, ds, ws) 
-        if existing_layer is not None:
-                msg = "There is already a layer named %s in %s" % (name, workspace)
-                raise ConflictingDataError(msg)
-        if len(attributes) < 1:
-                msg = "The specified attributes are invalid"
-                raise InvalidAttributesError(msg)
-
-        has_geom = False
-        attributes_block = "<attributes>"
-        empty_opts = {}
-        for spec in attributes:
-                if len(spec) == 2:
-                        att_name, binding = spec
-                        opts = empty_opts
-                elif len(spec) == 3:
-                        att_name, binding, opts = spec
-                else:
-                        raise InvalidAttributesError("expected tuple of (name,binding,dict?)")
-
-                nillable = opts.get("nillable",False)
-
-                if binding.find("com.vividsolutions.jts.geom") >= 0:
-                        has_geom = True
-
-                attributes_block += ("<attribute>"
-                        "<name>{name}</name>"
-                        "<binding>{binding}</binding>"
-                        "<nillable>{nillable}</nillable>"
-                        "</attribute>").format(name=att_name, binding=binding, nillable=nillable)
-        attributes_block += "</attributes>"
-
-        if has_geom == False:
-                msg = "Geometryless layers are not currently supported"
-                raise InvalidAttributesError(msg)
-
-        xml = ("<featureType>"
-                        "<name>{name}</name>"
-                        "<nativeName>{native_name}</nativeName>"
-                        "<title>{title}</title>"
-                        "<srs>{srs}</srs>"
-                        "{attributes}"
-                        "</featureType>").format(name=name.encode('UTF-8','strict'), native_name=native_name.encode('UTF-8','strict'), 
-                                                                                title=title.encode('UTF-8','strict'), srs=srs,
-                                                                                attributes=attributes_block)
-        headers = { "Content-Type": "application/xml" }
-        url = '%s/workspaces/%s/datastores/%s/featuretypes?charset=UTF-8' % (self.service_url, ws.name, store)
-        headers, response = self.http.request(url, "POST", xml, headers)
-        assert 200 <= headers.status < 300, "Tried to create PostGIS Layer but got " + str(headers.status) + ": " + response
-        self._cache.clear()
-        return self.get_resource(name)
-
 
     def get_store(self, name, workspace=None):
         #stores = [s for s in self.get_stores(workspace) if s.name == name]
@@ -342,6 +292,7 @@ class Catalog(object):
             workspace = store.workspace.name
         store = store.name
 
+<<<<<<< HEAD
         if isinstance(data, dict):
             bundle = prepare_upload_bundle(name, data)
         else:
@@ -357,6 +308,16 @@ class Catalog(object):
         headers = { 'Content-Type': 'application/zip', 'Accept': 'application/xml' }
         upload_url = url(self.service_url, 
             ["workspaces", workspace, "datastores", store, "file.shp"], params) 
+=======
+  def reload(self):
+    url = self.service_url + '/reload'
+    response = self.http.request(url, "POST")
+    return response
+
+  def save(self, object):
+    """
+    saves an object to the REST service
+>>>>>>> 611f990afcac059cfe2b5dbf7e93a2abf4335c55
 
         try:
             headers, response = self.http.request(upload_url, "PUT", message, headers)
@@ -529,6 +490,7 @@ class Catalog(object):
         else:
             return UnsavedLayerGroup(self, name, layers, styles, bounds)
 
+<<<<<<< HEAD
     def get_style(self, name):
         try:
             style_url = url(self.service_url, ["styles", name + ".xml"])
@@ -592,3 +554,88 @@ class Catalog(object):
 
     def set_default_workspace(self):
         raise NotImplementedError()
+=======
+  def create_style(self, name, data, overwrite = False, reload = False):
+    if overwrite == False and self.get_style(name) is not None:
+      raise ConflictingDataError("There is already a style named %s" % name)
+
+    headers = {
+      'Content-type': 'application/vnd.ogc.sld+xml',
+      'Accept': 'application/xml'
+    }
+
+    if overwrite:
+      style_url = "%s/styles/%s.sld" % (self.service_url, name)
+      headers, response = self.http.request(style_url, "PUT", data, headers)
+      #TODO: If PUT fails, should we try POST?
+      if headers.status == 404:
+        print headers
+        headers = {
+            'Content-type': 'application/vnd.ogc.sld+xml',
+            'Accept': 'application/xml'
+        }
+        style_url = "%s/styles?name=%s" % (self.service_url, name)
+        headers, response = self.http.request(style_url, "POST", data, headers)
+    else:
+      style_url = "%s/styles?name=%s" % (self.service_url, name)
+      headers, response = self.http.request(style_url, "POST", data, headers)
+
+    if headers.status < 200 or headers.status > 299: raise UploadError(response)
+    if reload == True:
+      print self.reload()
+    self._cache.clear()
+
+  def get_namespace(self, id=None, prefix=None, uri=None):
+    raise NotImplementedError()
+
+  def get_default_namespace(self):
+    raise NotImplementedError()
+
+  def set_default_namespace(self):
+    raise NotImplementedError()
+
+  def create_workspace(self, name, uri):
+    xml = ("<namespace>"
+          "<prefix>{name}</prefix>"
+          "<uri>{uri}</uri>"
+          "</namespace>").format(name=name, uri=uri)
+    headers = { "Content-Type": "application/xml" }
+    workspace_url = self.service_url + "/namespaces/"
+
+    headers, response = self.http.request(workspace_url, "POST", xml, headers)
+    assert 200 <= headers.status < 300, "Tried to create workspace but got " + str(headers.status) + ": " + response
+    return self.get_workspace(name)
+
+  def get_workspaces(self):
+    description = self.get_xml("%s/workspaces.xml" % self.service_url)
+    return [Workspace(self, node) for node in description.findall("workspace")]
+
+  def get_workspace(self, name):
+    candidates = filter(lambda x: x.name == name, self.get_workspaces())
+    if len(candidates) == 0:
+      return None
+    elif len(candidates) > 1:
+      raise AmbiguousRequestError()
+    else:
+      return candidates[0]
+
+  def reassign_workspace(self, store, workspace):
+    def _create_forcing_workspace(self, store, workspace):
+      pass
+    def _dupe_resource(res, newstore): pass
+    newstore = _create_forcing_workspace(self, store, workspace)
+    for res in cat.get_resources(store):
+      dupe_resource(res, newstore)
+    self.delete(store, purge=True)
+
+  def get_default_workspace(self):
+      return Workspace(self, XML("""
+          <workspace>
+              <atom:link xmlns:atom="%s" href="%s/workspaces/default.xml"></atom:link>
+          </workspace>
+      """ % ("http://www.w3.org/2005/Atom", self.service_url)
+      ))
+
+  def set_default_workspace(self):
+    raise NotImplementedError()
+>>>>>>> 611f990afcac059cfe2b5dbf7e93a2abf4335c55

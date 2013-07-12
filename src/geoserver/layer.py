@@ -1,9 +1,5 @@
-from geoserver.support import ResourceInfo, atom_link, atom_link_xml, \
-        xml_property, write_bool, write_string
+from geoserver.support import ResourceInfo, xml_property, write_bool, url
 from geoserver.style import Style
-from geoserver.resource import FeatureType, Coverage 
-
-from collections import namedtuple
 
 class _attribution(object):
     def __init__(self, title, width, height):
@@ -72,7 +68,7 @@ class Layer(ResourceInfo):
 
     @property
     def href(self):
-        return "%s/layers/%s.xml" % (self.catalog.service_url, self.name)
+        return url(self.catalog.service_url, ["layers", self.name + ".xml"])
 
     @property
     def resource(self):
@@ -86,8 +82,12 @@ class Layer(ResourceInfo):
             return self.dirty['default_style']
         if self.dom is None:
             self.fetch()
-        name = self.dom.find("defaultStyle/name").text
-        return self.catalog.get_style(name)
+        name = self.dom.find("defaultStyle/name")
+        # aborted data uploads can result in no default style
+        if name is not None:
+            return self.catalog.get_style(name.text)
+        else:
+            return None
 
     def _set_default_style(self, style):
         if isinstance(style, Style):

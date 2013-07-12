@@ -36,7 +36,7 @@ Once you have the prerequisite software installed, follow these steps:
 
 1. Fetch the gsconfig.py sources::
 
-   $ git clone http://github.com/dwins/gsconfig.py.git/
+   $ git clone git://github.com/dwins/gsconfig.py.git
 
 2. Switch directories to the new copy of gsconfig.
 
