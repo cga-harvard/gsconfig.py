@@ -278,7 +278,7 @@ class Catalog(object):
     headers, response = self.http.request(url, "POST", xml, headers)
     assert 200 <= headers.status < 300, "Tried to create PostGIS Layer but got " + str(headers.status) + ": " + response
     self._cache.clear()
-    return self.get_resource(name)
+    return self.get_resource(name, ds, ws)
 
 
   def create_datastore(self, name, workspace = None):
