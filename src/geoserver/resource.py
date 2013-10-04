@@ -182,3 +182,51 @@ class Coverage(ResourceInfo):
                 responseSRS = write_string_list("responseSRS"),
                 supportedFormats = write_string_list("supportedFormats")
             )
+
+class WmsType(ResourceInfo):
+    resource_type = "wmsType"
+    save_method = "PUT"
+
+    def __init__(self, catalog, workspace, store, name):
+        super(WmsType, self).__init__()
+
+        assert isinstance(store, ResourceInfo)
+        assert isinstance(name, basestring)
+
+        self.catalog = catalog
+        self.workspace = workspace
+        self.store = store
+        self.name = name
+
+    @property
+    def href(self):
+        return "%s/workspaces/%s/wmsstores/%s/wmslayers/%s.xml" % (
+            self.catalog.service_url,
+            self.workspace.name,
+            self.store.name,
+            self.name
+        )
+
+    title = xml_property("name")
+    abstract = xml_property("abstract")
+    enabled = xml_property("enabled")
+    native_bbox = xml_property("nativeBoundingBox", bbox)
+    latlon_bbox = xml_property("latLonBoundingBox", bbox)
+    projection = xml_property("srs")
+    projection_policy = xml_property("projectionPolicy")
+    keywords = xml_property("keywords", string_list)
+    attributes = xml_property("attributes", attribute_list)
+    metadata = xml_property("metadata", key_value_pair_test)
+    metadata_links = xml_property("metadataLinks", metadata_link_list)
+
+    writers = dict(
+        name = write_string("name"),
+        abstract = write_string("abstract"),
+        enabled = write_bool("enabled"),
+        nativeBoundingBox = write_bbox("nativeBoundingBox"),
+        latLonBoundingBox = write_bbox("latLonBoundingBox"),
+        srs = write_string("srs"),
+        projectionPolicy = write_string("projectionPolicy"),
+        keywords = write_string_list("keywords"),
+        metadataLinks = write_metadata_link_list("metadataLinks")
+    )
