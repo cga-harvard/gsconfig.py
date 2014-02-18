@@ -1,13 +1,13 @@
-<<<<<<< HEAD
+#<<<<<<< HEAD
 from geoserver.support import ResourceInfo, xml_property, write_string, \
         atom_link, atom_link_xml, bbox, bbox_xml, write_bbox, \
         string_list, write_string_list, attribute_list, write_bool, \
-        key_value_pairs, key_value_pair_test, FORCE_NATIVE, FORCE_DECLARED, REPROJECT
+        key_value_pairs, key_value_pair_test, FORCE_NATIVE, FORCE_DECLARED, REPROJECT,url
 from xml.etree.ElementTree import tostring
-=======
-from geoserver.support import ResourceInfo, xml_property, write_string, bbox, \
-    write_bbox, string_list, write_string_list, attribute_list, write_bool, url
->>>>>>> gsboundless/master
+#=======
+#from geoserver.support import ResourceInfo, xml_property, write_string, bbox, \
+#    write_bbox, string_list, write_string_list, attribute_list, write_bool, url
+#>>>>>>> gsboundless/master
 
 def md_link(node):
     """Extract a metadata link tuple from an xml node"""
