@@ -1,70 +1,49 @@
 import logging
 from xml.etree.ElementTree import TreeBuilder, tostring
 from tempfile import mkstemp
-import urllib
-import urlparse
 from zipfile import ZipFile
-import os
+
 
 logger = logging.getLogger("gsconfig.support")
 
 FORCE_DECLARED = "FORCE_DECLARED"
-## The projection handling policy for layers that should use coordinates
-## directly while reporting the configured projection to clients.  This should be
-## used when projection information is missing from the underlying datastore.
-
+"""
+The projection handling policy for layers that should use coordinates
+directly while reporting the configured projection to clients.  This should be
+used when projection information is missing from the underlying datastore.
+"""
 
 FORCE_NATIVE = "FORCE_NATIVE"
-## The projection handling policy for layers that should use the projection
-## information from the underlying storage mechanism directly, and ignore the
-## projection setting.
+"""
+The projection handling policy for layers that should use the projection
+information from the underlying storage mechanism directly, and ignore the
+projection setting.
+"""
 
 REPROJECT = "REPROJECT"
-## The projection handling policy for layers that should use the projection
-## information from the underlying storage mechanism to reproject to the
-## configured projection.
+"""
+The projection handling policy for layers that should use the projection
+information from the underlying storage mechanism to reproject to the
+configured projection.
+"""
 
-def url(base, seg, query=None):
-    """
-    Create a URL from a list of path segments and an optional dict of query
-    parameters.
-    """
-
-    def clean_segment(segment):
-        """
-        Cleans the segment and encodes to UTF-8 if the segment is unicode.
-        """
-        segment = segment.strip('/')
-        if isinstance(segment, unicode):
-            segment = segment.encode('utf-8')
-        return segment
-
-    seg = (urllib.quote(clean_segment(s)) for s in seg)
-    if query is None or len(query) == 0:
-        query_string = ''
-    else:
-        query_string = "?" + urllib.urlencode(query)
-    path = '/'.join(seg) + query_string
-    adjusted_base = base.rstrip('/') + '/'
-    return urlparse.urljoin(adjusted_base, path)
-
-def xml_property(path, converter = lambda x: x.text, default=None):
-    def getter(self):
+def xml_property(path, converter = lambda x: x.text):
+    def get(self):
         if path in self.dirty:
             return self.dirty[path]
         else:
             if self.dom is None:
                 self.fetch()
             node = self.dom.find(path)
-            return converter(self.dom.find(path)) if node is not None else default
+            return converter(self.dom.find(path)) if node is not None else None
 
-    def setter(self, value):
+    def set(self, value):
         self.dirty[path] = value
 
     def delete(self):
         self.dirty[path] = None
 
-    return property(getter, setter, delete)
+    return property(get, set, delete)
 
 def bbox(node):
     if node is not None: 
@@ -84,11 +63,11 @@ def bbox(node):
 
 def string_list(node):
     if node is not None:
-        return [n.text for n in node.findall("string")]
+       return [n.text for n in node.findall("string")]
 
 def attribute_list(node):
     if node is not None:
-        return [n.text for n in node.findall("attribute/name")]
+       return [n.text for n in node.findall("attribute/name")]
 
 def key_value_pairs(node):
     if node is not None:
@@ -159,10 +138,7 @@ class ResourceInfo(object):
         # GeoServer will disable the resource if we omit the <enabled> tag,
         # so force it into the dirty dict before writing
         if hasattr(self, "enabled"):
-            self.dirty['enabled'] = self.enabled
-
-        if hasattr(self, "advertised"):
-            self.dirty['advertised'] = self.advertised
+            self.enabled = self.enabled
 
         for k, writer in self.writers.items():
             if k in self.dirty:
@@ -185,7 +161,6 @@ def prepare_upload_bundle(name, data):
     these expectations, based on a basename, and a dict of extensions to paths or
     file-like objects. The client code is responsible for deleting the zip
     archive when it's done."""
-#<<<<<<< HEAD
     handle, f = mkstemp() # we don't use the file handle directly. should we?
     if 'shp' in data:
         zip = ZipFile(f, 'w')
@@ -217,19 +192,6 @@ def prepare_upload_bundle(name, data):
                 logger.debug("================Write [%s].[%s]", fname, ext)
                 newzip.writestr(name + ext, oldzip.read(file))
     return f
-#=======
-#    fd, path = mkstemp()
-#    zip_file = ZipFile(path, 'w')
-#    for ext, stream in data.iteritems():
-#        fname = "%s.%s" % (name, ext)
-#        if (isinstance(stream, basestring)):
-#            zip_file.write(stream, fname)
-#        else:
-#            zip_file.writestr(fname, stream.read())
-#    zip_file.close()
-#    os.close(fd)
-#    return path
-#>>>>>>> gsboundless/master
 
 def atom_link(node):
     if 'href' in node.attrib:
@@ -247,8 +209,24 @@ def atom_link_xml(builder, href):
     })
     builder.end("atom:link")
 
-def bbox_xml(builder, box):
-    minx, maxx, miny, maxy, crs = box
+def bbox(node):
+    if node is not None:
+        minx = node.find("minx")
+        maxx = node.find("maxx")
+        miny = node.find("miny")
+        maxy = node.find("maxy")
+        crs  = node.find("crs")
+        crs  = crs.text if crs is not None else None
+
+        if (None not in [minx, maxx, miny, maxy]):
+            return (minx.text, maxx.text, miny.text, maxy.text, crs)
+        else:
+            return None
+    else:
+        return None
+
+def bbox_xml(builder, bbox):
+    minx, maxx, miny, maxy, crs = bbox
     builder.start("minx", dict())
     builder.data(minx)
     builder.end("minx")
