@@ -3,21 +3,21 @@
 
 from setuptools import setup, find_packages
 
-<<<<<<< HEAD
+#<<<<<<< HEAD
 setup(name = "gsconfig.py",
     version = "1.0wm",
     description = "GeoServer REST Configuration Client",
-=======
-try:
-    readme_text = file('README.rst', 'rb').read()
-except IOError,e:
-    readme_text = ''
-
-setup(name = "gsconfig",
-    version = "0.6.6",
-    description = "GeoServer REST Configuration",
-    long_description = readme_text,
->>>>>>> gsboundless/master
+#=======
+#try:
+#    readme_text = file('README.rst', 'rb').read()
+#except IOError,e:
+#    readme_text = ''
+#
+#setup(name = "gsconfig",
+#    version = "0.6.6",
+#    description = "GeoServer REST Configuration",
+#    long_description = readme_text,
+#>>>>>>> gsboundless/master
     keywords = "GeoServer REST Configuration",
     license = "MIT",
     url = "http://github.com/opengeo/gsconfig.py",
