@@ -1,0 +1,11 @@
+Metadata-Version: 1.0
+Name: gsconfig.py
+Version: 1.0
+Summary: GeoServer REST Configuration Client
+Home-page: http://bitbucket.org/dwins/gsconfigpy
+Author: David Winslow, Sebastian Benthall
+Author-email: dwinslow@opengeo.org
+License: MIT
+Description: UNKNOWN
+Keywords: GeoServer REST Configuration
+Platform: UNKNOWN

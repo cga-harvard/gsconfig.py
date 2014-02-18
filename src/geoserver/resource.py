@@ -1,8 +1,13 @@
+<<<<<<< HEAD
 from geoserver.support import ResourceInfo, xml_property, write_string, \
         atom_link, atom_link_xml, bbox, bbox_xml, write_bbox, \
         string_list, write_string_list, attribute_list, write_bool, \
         key_value_pairs, key_value_pair_test, FORCE_NATIVE, FORCE_DECLARED, REPROJECT
 from xml.etree.ElementTree import tostring
+=======
+from geoserver.support import ResourceInfo, xml_property, write_string, bbox, \
+    write_bbox, string_list, write_string_list, attribute_list, write_bool, url
+>>>>>>> gsboundless/master
 
 def md_link(node):
     """Extract a metadata link tuple from an xml node"""
@@ -22,12 +27,15 @@ def write_metadata_link_list(name):
     def write(builder, md_links):
         builder.start(name, dict())
         for (mime, md_type, content_url) in md_links:
+            # geoserver supports only three mime
+            if mime not in ['ISO19115:2003', 'FGDC', 'TC211']:
+                mime = 'other'
             builder.start("metadataLink", dict())
             builder.start("type", dict())
-            builder.data(mime)
+            builder.data(md_type)
             builder.end("type")
             builder.start("metadataType", dict())
-            builder.data(md_type)
+            builder.data(mime)
             builder.end("metadataType")
             builder.start("content", dict())
             builder.data(content_url)
@@ -44,33 +52,62 @@ def coverage_from_index(catalog, workspace, store, node):
     name = node.find("name")
     return Coverage(catalog, workspace, store, name.text)
 
-class FeatureType(ResourceInfo):
-    resource_type = "featureType"
-    save_method = "PUT"
+def wmslayer_from_index(catalog, workspace, store, node):
+    name = node.find("name")
+    return WmsLayer(catalog, workspace, store, name.text)
 
-    def __init__(self, catalog, workspace, store, name):
-        super(FeatureType, self).__init__()
-  
-        assert isinstance(store, ResourceInfo)
-        assert isinstance(name, basestring)
-        
+class _ResourceBase(ResourceInfo):
+    save_method = 'PUT'
+
+    def __init__(self, catalog, workspace, store, name, href=None):
+        super(_ResourceBase, self).__init__()
+
+        if not href:
+            assert isinstance(store, ResourceInfo)
+            assert isinstance(name, basestring)
+            assert workspace is not None
+        else:
+            parts = href.split('/')
+            self._workspace_name = parts[parts.index('workspaces') + 1]
+            self._store_name = parts[parts.index(self.url_part_stores) + 1]
+            name = parts[-1].replace('.xml','')
+
+        self._href = href
         self.catalog = catalog
-        self.workspace = workspace
-        self.store = store
+        self._workspace = workspace
+        self._store = store
         self.name = name
 
     @property
+    def workspace(self):
+        if not self._workspace:
+            self._workspace = self.catalog.get_workspace(self._workspace_name)
+        return self._workspace
+
+    @property
+    def store(self):
+        if not self._store:
+            self._store = self.catalog.get_store(self._store_name, self._workspace_name)
+        return self._store
+
+    @property
     def href(self):
-        return "%s/workspaces/%s/datastores/%s/featuretypes/%s.xml" % (
-                self.catalog.service_url,
-                self.workspace.name,
-                self.store.name,
-                self.name
-                )
+        return self._href or url(self.catalog.service_url,
+            ["workspaces", self.workspace.name,
+             self.url_part_stores, self.store.name,
+             self.url_part_types, self.name + ".xml"])
+
+
+class FeatureType(_ResourceBase):
+
+    resource_type = "featureType"
+    url_part_stores = 'datastores'
+    url_part_types = 'featuretypes'
 
     title = xml_property("title")
     abstract = xml_property("abstract")
     enabled = xml_property("enabled")
+    advertised = xml_property("advertised", default="true")
     native_bbox = xml_property("nativeBoundingBox", bbox)
     latlon_bbox = xml_property("latLonBoundingBox", bbox)
     projection = xml_property("srs")
@@ -84,6 +121,7 @@ class FeatureType(ResourceInfo):
                 title = write_string("title"),
                 abstract = write_string("abstract"),
                 enabled = write_bool("enabled"),
+                advertised = write_bool("advertised"),
                 nativeBoundingBox = write_bbox("nativeBoundingBox"),
                 latLonBoundingBox = write_bbox("latLonBoundingBox"),
                 srs = write_string("srs"),
@@ -93,23 +131,23 @@ class FeatureType(ResourceInfo):
             )
 
 class CoverageDimension(object):
-    def __init__(self, name, description, range):
+    def __init__(self, name, description, dimension_range):
         self.name = name
         self.description = description
-        self.range = range
+        self.dimension_range = dimension_range
 
 def coverage_dimension(node):
     name = node.find("name")
     name = name.text if name is not None else None
     description = node.find("description")
     description = description.text if description is not None else None
-    min = node.find("range/min")
-    max = node.find("range/max")
-    range = None
+    range_min = node.find("range/min")
+    range_max = node.find("range/max")
+    dimension_range = None
     if None not in [min, max]:
-        range = float(min.text), float(max.text)
+        dimension_range = float(range_min.text), float(range_max.text)
     if None not in [name, description]:
-        return CoverageDimension(name, description, range)
+        return CoverageDimension(name, description, dimension_range)
     else:
         return None # should we bomb out more spectacularly here?
 
@@ -135,29 +173,16 @@ def coverage_dimension_xml(builder, dimension):
 
     builder.end("coverageDimension")
 
-class Coverage(ResourceInfo):
-    def __init__(self, catalog, workspace, store, name):
-        super(Coverage, self).__init__()
-        self.catalog = catalog
-        self.workspace = workspace
-        self.store = store
-        self.name = name
-
-    @property
-    def href(self):
-        return "%s/workspaces/%s/coveragestores/%s/coverages/%s.xml" % (
-                self.catalog.service_url,
-                self.workspace.name,
-                self.store.name,
-                self.name
-                )
+class Coverage(_ResourceBase):
 
     resource_type = "coverage"
-    save_method = "PUT"
+    url_part_stores = 'coveragestores'
+    url_part_types = 'coverages'
 
     title = xml_property("title")
     abstract = xml_property("abstract")
     enabled = xml_property("enabled")
+    advertised = xml_property("advertised", default="true")
     native_bbox = xml_property("nativeBoundingBox", bbox)
     latlon_bbox = xml_property("latLonBoundingBox", bbox)
     projection = xml_property("srs")
@@ -172,6 +197,7 @@ class Coverage(ResourceInfo):
                 title = write_string("title"),
                 abstract = write_string("abstract"),
                 enabled = write_bool("enabled"),
+                advertised = write_bool("advertised"),
                 nativeBoundingBox = write_bbox("nativeBoundingBox"),
                 latLonBoundingBox = write_bbox("latLonBoundingBox"),
                 srs = write_string("srs"),
@@ -182,3 +208,50 @@ class Coverage(ResourceInfo):
                 responseSRS = write_string_list("responseSRS"),
                 supportedFormats = write_string_list("supportedFormats")
             )
+
+class WmsLayer(ResourceInfo):
+    resource_type = "wmsLayer"
+    save_method = "PUT"
+    
+    def __init__(self, catalog, workspace, store, name):
+        super(WmsLayer, self).__init__()
+        self.catalog = catalog
+        self.workspace = workspace
+        self.store = store
+        self.name = name
+
+    @property
+    def href(self):
+        return "%s/workspaces/%s/wmsstores/%s/wmslayers/%s.xml" % (
+                self.catalog.service_url,
+                self.workspace.name,
+                self.store.name,
+                self.name
+                )
+
+
+    title = xml_property("title")
+    description = xml_property("description")
+    abstract = xml_property("abstract")
+    keywords = xml_property("keywords", string_list)
+    # nativeCRS
+    projection = xml_property("srs")
+    native_bbox = xml_property("nativeBoundingBox", bbox)
+    latlon_bbox = xml_property("latLonBoundingBox", bbox)
+    projection_policy = xml_property("projectionPolicy")
+    enabled = xml_property("enabled")
+    metadata_links = xml_property("metadataLinks", metadata_link_list)   
+ 
+    writers = dict(
+                title = write_string("title"),
+                description = write_string("description"),
+                abstract = write_string("abstract"),
+                keywords = write_string_list("keywords"),
+                # nativeCRS
+                projection = write_string("srs"),
+                nativeBoundingBox = write_bbox("nativeBoundingBox"),
+                latLonBoundingBox = write_bbox("latLonBoundingBox"),
+                projection_policy = write_string("projectionPolicy"),
+                enabled = write_bool("enabled"),
+                metadataLinks = write_metadata_link_list("metadataLinks")
+           )
