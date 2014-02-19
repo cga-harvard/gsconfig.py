@@ -89,14 +89,6 @@ class Layer(ResourceInfo):
             return self.dirty['default_style']
         if self.dom is None:
             self.fetch()
-<<<<<<< HEAD
-        name = self.dom.find("defaultStyle/name")
-        # aborted data uploads can result in no default style
-        if name is not None:
-            return self.catalog.get_style(name.text)
-        else:
-            return None
-=======
         element = self.dom.find("defaultStyle")
         # aborted data uploads can result in no default style
         return self._resolve_style(element) if element is not None else None
@@ -108,7 +100,6 @@ class Layer(ResourceInfo):
         if atom_link:
             style_workspace_url = atom_link[0].attrib.get("href")
             return self.catalog.get_style_by_url(style_workspace_url)
->>>>>>> gsboundless/master
 
     def _set_default_style(self, style):
         if isinstance(style, Style):
