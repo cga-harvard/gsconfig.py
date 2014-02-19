@@ -3,13 +3,13 @@ import logging
 from geoserver.layer import Layer
 from geoserver.resource import FeatureType, Coverage
 from geoserver.store import coveragestore_from_index, datastore_from_index, \
-<<<<<<< HEAD
-    DataStore, CoverageStore, UnsavedDataStore, UnsavedCoverageStore
+    DataStore, CoverageStore, UnsavedDataStore, UnsavedCoverageStore,wmsstore_from_index,UnsavedWmsStore
+#<<<<<<< HEAD
 from geoserver.resource import FeatureType
-=======
-    wmsstore_from_index, UnsavedDataStore, \
-    UnsavedCoverageStore, UnsavedWmsStore
->>>>>>> gsboundless/master
+#=======
+#    wmsstore_from_index, UnsavedDataStore, \
+#    UnsavedCoverageStore, UnsavedWmsStore
+#>>>>>>> gsboundless/master
 from geoserver.style import Style
 from geoserver.support import prepare_upload_bundle, url
 from geoserver.layergroup import LayerGroup, UnsavedLayerGroup
@@ -35,25 +35,25 @@ class AmbiguousRequestError(Exception):
 class FailedRequestError(Exception):
     pass
 
-<<<<<<< HEAD
+#<<<<<<< HEAD
 class InvalidAttributesError(Exception):
     pass
-=======
-def _name(named):
-    """Get the name out of an object.  This varies based on the type of the input:
-       * the "name" of a string is itself
-       * the "name" of None is itself
-       * the "name" of an object with a property named name is that property -
-         as long as it's a string
-       * otherwise, we raise a ValueError
-    """
-    if isinstance(named, basestring) or named is None:
-        return named
-    elif hasattr(named, 'name') and isinstance(named.name, basestring):
-        return named.name
-    else:
-        raise ValueError("Can't interpret %s as a name or a configuration object" % named)
->>>>>>> gsboundless/master
+#=======
+#def _name(named):
+#    """Get the name out of an object.  This varies based on the type of the input:
+#       * the "name" of a string is itself
+#       * the "name" of None is itself
+#       * the "name" of an object with a property named name is that property -
+#         as long as it's a string
+#       * otherwise, we raise a ValueError
+#    """
+#    if isinstance(named, basestring) or named is None:
+#        return named
+#    elif hasattr(named, 'name') and isinstance(named.name, basestring):
+#        return named.name
+#    else:
+#        raise ValueError("Can't interpret %s as a name or a configuration object" % named)
+#>>>>>>> gsboundless/master
 
 class Catalog(object):
     """
@@ -331,316 +331,6 @@ class Catalog(object):
             workspace = store.workspace.name
         store = store.name
 
-<<<<<<< HEAD
-    gets the object's REST location and the XML from the object,
-    then POSTS the request.
-    """
-    url = obj.href
-    message = obj.message()
-
-    headers = {
-      "Content-type": "application/xml",
-      "Accept": "application/xml"
-    }
-    logger.debug("%s %s", obj.save_method, obj.href)
-    headers, response = self.http.request(url, obj.save_method, message, headers)
-    self._cache.clear()
-    if headers.status < 200 or headers.status > 299: raise UploadError(response) 
-
-  def get_store(self, name, workspace=None):
-      #stores = [s for s in self.get_stores(workspace) if s.name == name]
-      if workspace is None:
-          store = None
-          for ws in self.get_workspaces():
-              found = None
-              try:
-                  found = self.get_store(name, ws)
-              except:
-                  # don't expect every workspace to contain the named store
-                  pass
-              if found:
-                  if store:
-                      raise AmbiguousRequestError("Multiple stores found named: " + name)
-                  else:
-                      store = found
-
-          if not store:
-              raise FailedRequestError("No store found named: " + name)
-          return store
-      else: # workspace is not None
-          logger.debug("datastore url is [%s]", workspace.datastore_url )
-          ds_list = self.get_xml(workspace.datastore_url)
-          cs_list = self.get_xml(workspace.coveragestore_url)
-          datastores = [n for n in ds_list.findall("dataStore") if n.find("name").text == name]
-          coveragestores = [n for n in cs_list.findall("coverageStore") if n.find("name").text == name]
-          ds_len, cs_len = len(datastores), len(coveragestores)
-
-          if ds_len == 1 and cs_len == 0:
-              return datastore_from_index(self, workspace, datastores[0])
-          elif ds_len == 0 and cs_len == 1:
-              return coveragestore_from_index(self, workspace, coveragestores[0])
-          elif ds_len == 0 and cs_len == 0:
-              raise FailedRequestError("No store found in " + str(workspace) + " named: " + name)
-          else:
-              raise AmbiguousRequestError(str(workspace) + " and name: " + name + " do not uniquely identify a layer")
-
-  def get_stores(self, workspace=None):
-      if workspace is not None:
-          ds_list = self.get_xml(workspace.datastore_url)
-          cs_list = self.get_xml(workspace.coveragestore_url)
-          datastores = [datastore_from_index(self, workspace, n) for n in ds_list.findall("dataStore")]
-          coveragestores = [coveragestore_from_index(self, workspace, n) for n in cs_list.findall("coverageStore")]
-          return datastores + coveragestores
-      else:
-          stores = []
-          for ws in self.get_workspaces():
-              a = self.get_stores(ws)
-              stores.extend(a)
-          return stores
-
-  def create_native_layer(self, workspace, store, name,
-          native_name, title, srs, attributes):
-    """
-    Physically create a layer in one of GeoServer's datastores.
-    For example, this will actually create a table in a Postgis store.
-
-    Parameters include:
-    workspace - the Workspace object or name of the workspace of the store to
-       use
-    store - the Datastore object or name of the store to use
-    name - the published name of the store
-    native_name - the name used in the native storage format (such as a
-        filename or database table name)
-    title - the title for the created featuretype configuration
-    srs - the SRID for the SRS to use (like "EPSG:4326" for lon/lat)
-    attributes - a dict specifying the names and types of the attributes for
-       the new table.  Types should be specified using Java class names:
-
-       * boolean = java.lang.Boolean
-       * byte = java.lang.Byte
-       * timestamp = java.util.Date
-       * double = java.lang.Double
-       * float = java.lang.Float
-       * integer = java.lang.Integer
-       * long = java.lang.Long
-       * short = java.lang.Short
-       * string = java.lang.String
-    """
-    if isinstance(workspace, basestring):
-        ws = self.get_workspace(workspace)
-    elif workspace is None:
-        ws = self.get_default_workspace()
-    ds = self.get_store(store, ws)
-    existing_layer = self.get_resource(name, ds, ws) 
-    if existing_layer is not None:
-        msg = "There is already a layer named %s in %s" % (name, workspace)
-        raise ConflictingDataError(msg)
-    if len(attributes) < 1:
-        msg = "The specified attributes are invalid"
-        raise InvalidAttributesError(msg)
-
-    has_geom = False
-    attributes_block = "<attributes>"
-    empty_opts = {}
-    for spec in attributes:
-        if len(spec) == 2:
-            att_name, binding = spec
-            opts = empty_opts
-        elif len(spec) == 3:
-            att_name, binding, opts = spec
-        else:
-            raise InvalidAttributesError("expected tuple of (name,binding,dict?)")
-
-        nillable = opts.get("nillable",False)
-
-        if binding.find("com.vividsolutions.jts.geom") >= 0:
-            has_geom = True
-
-        attributes_block += ("<attribute>"
-            "<name>{name}</name>"
-            "<binding>{binding}</binding>"
-            "<nillable>{nillable}</nillable>"
-            "</attribute>").format(name=att_name, binding=binding, nillable=nillable)
-    attributes_block += "</attributes>"
-
-    if has_geom == False:
-        msg = "Geometryless layers are not currently supported"
-        raise InvalidAttributesError(msg)
-
-    xml = ("<featureType>"
-            "<name>{name}</name>"
-            "<nativeName>{native_name}</nativeName>"
-            "<title>{title}</title>"
-            "<srs>{srs}</srs>"
-            "{attributes}"
-            "</featureType>").format(name=name.encode('UTF-8','strict'), native_name=native_name.encode('UTF-8','strict'), 
-                                        title=title.encode('UTF-8','strict'), srs=srs,
-                                        attributes=attributes_block)
-    headers = { "Content-Type": "application/xml" }
-    url = '%s/workspaces/%s/datastores/%s/featuretypes?charset=UTF-8' % (self.service_url, ws.name, store)
-    headers, response = self.http.request(url, "POST", xml, headers)
-    assert 200 <= headers.status < 300, "Tried to create PostGIS Layer but got " + str(headers.status) + ": " + response
-    self._cache.clear()
-    return self.get_resource(name, ds, ws)
-
-
-  def create_datastore(self, name, workspace = None):
-      if isinstance(workspace, basestring):
-          workspace = self.get_workspace(workspace)
-      elif workspace is None:
-          workspace = self.get_default_workspace()
-      return UnsavedDataStore(self, name, workspace)
-
-  def create_coveragestore2(self, name, workspace = None):
-      """
-      Hm we already named the method that creates a coverage *resource*
-      create_coveragestore... time for an API break?
-      """
-      if workspace is None:
-          workspace = self.get_default_workspace()
-      return UnsavedCoverageStore(self, name, workspace)
-
-  def add_data_to_store(self, store, name, data, overwrite = False, charset = None):
-      if isinstance(data, dict):
-          bundle = prepare_upload_bundle(name, data)
-      else:
-          bundle = data
-
-      params = dict()
-      if overwrite:
-          params["update"] = "overwrite"
-      if charset is not None:
-          params["charset"] = charset
-
-      if len(params):
-          params = "?" + urlencode(params)
-      else:
-          params = ""
-
-      logger.debug('PARAMS: %s', params)
-
-      message = open(bundle)
-      headers = { 'Content-Type': 'application/zip', 'Accept': 'application/xml' }
-      url = "%s/workspaces/%s/datastores/%s/file.shp%s" % (
-              self.service_url, store.workspace.name, store.name, params)
-
-
-      try:
-          headers, response = self.http.request(url, "PUT", message, headers)
-          self._cache.clear()
-          if headers.status != 201:
-              raise UploadError(response)
-      finally:
-          unlink(bundle)
-
-  def create_featurestore(self, name, data, workspace=None, overwrite=False, charset=None):
-    if not overwrite:
-        try:
-            store = self.get_store(name, workspace)
-            msg = "There is already a store named " + name
-            if workspace:
-                msg += " in " + str(workspace)
-            raise ConflictingDataError(msg)
-        except FailedRequestError, e:
-            # we don't really expect that every layer name will be taken
-            pass
-
-    if workspace is None:
-      workspace = self.get_default_workspace()
-
-    params = dict()
-    if overwrite:
-          params["overwrite"] = True
-    if charset is not None:
-          params["charset"] = charset
-
-    if len(params):
-          params = "?" + urlencode(params)
-    else:
-          params = ""
-
-
-
-    ds_url = "%s/workspaces/%s/datastores/%s/file.shp%s" % (self.service_url, workspace.name, name, params)
-
-    # PUT /workspaces/<ws>/datastores/<ds>/file.shp
-    headers = {
-      "Content-type": "application/zip",
-      "Accept": "application/xml"
-    }
-    if  isinstance(data,dict):
-        logger.debug('Data is NOT a zipfile')
-        archive = prepare_upload_bundle(name, data)
-    else:
-        logger.debug('Data is a zipfile')
-        archive = data
-    message = open(archive)
-    try:
-      headers, response = self.http.request(ds_url, "PUT", message, headers)
-      self._cache.clear()
-      if headers.status != 201:
-          raise UploadError(response)
-    finally:
-      unlink(archive)
-
-  def create_coveragestore(self, name, data, workspace=None, overwrite=False):
-    if not overwrite:
-        try:
-            store = self.get_store(name, workspace)
-            msg = "There is already a store named " + name
-            if workspace:
-                msg += " in " + str(workspace)
-            raise ConflictingDataError(msg)
-        except FailedRequestError, e:
-            # we don't really expect that every layer name will be taken
-            pass
-
-    if workspace is None:
-      workspace = self.get_default_workspace()
-    headers = {
-      "Content-type": "image/tiff",
-      "Accept": "application/xml"
-    }
-
-    zip = None
-    ext = "geotiff"
-
-    if isinstance(data, dict):
-      zip = prepare_upload_bundle(name, data)
-      message = open(zip)
-      if "tfw" in data:
-        headers['Content-type'] = 'application/zip'
-        ext = "worldimage"
-    elif isinstance(data, basestring):
-      message = open(data)
-    else:
-      message = data
-
-    cs_url = "%s/workspaces/%s/coveragestores/%s/file.%s" % (self.service_url, workspace.name, name, ext)
-    try:
-      headers, response = self.http.request(cs_url, "PUT", message, headers)
-      self._cache.clear()
-      if headers.status != 201:
-          raise UploadError(response)
-    finally:
-      if zip is not None:
-        unlink(zip)
-
-  def get_resource(self, name, store=None, workspace=None):
-    if store is not None:
-        if store.resource_type == "dataStore" and store.name != name:
-            workspace = store.workspace
-            try:
-                candidate = FeatureType(self, workspace, store, name)
-                candidate.title #throw FailedRequestError if not found
-                return candidate
-            except FailedRequestError:
-                return None 
-            except Exception, e:
-                raise e
-        else:
-            candidates = filter(lambda x: x.name == name, self.get_resources(store))
-=======
         if isinstance(data, dict):
             bundle = prepare_upload_bundle(name, data)
         else:
@@ -763,7 +453,6 @@ class Catalog(object):
         
         if store is not None:
             candidates = [s for s in self.get_resources(store) if s.name == name]
->>>>>>> gsboundless/master
             if len(candidates) == 0:
                 return None
             elif len(candidates) > 1:
@@ -771,11 +460,6 @@ class Catalog(object):
             else:
                 return candidates[0]
 
-<<<<<<< HEAD
-    if workspace is not None:
-      for store in self.get_stores(workspace):
-        resource = self.get_resource(name, store)
-=======
         if workspace is not None:
             for store in self.get_stores(workspace):
                 resource = self.get_resource(name, store)
@@ -832,7 +516,6 @@ class Catalog(object):
         layers_url = url(self.service_url, ["layers.xml"])
         description = self.get_xml(layers_url)
         lyrs = [Layer(self, l.find("name").text) for l in description.findall("layer")]
->>>>>>> gsboundless/master
         if resource is not None:
             lyrs = [l for l in lyrs if l.resource.href == resource.href]
         # TODO: Filter by style
