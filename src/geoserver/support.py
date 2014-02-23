@@ -185,7 +185,7 @@ def prepare_upload_bundle(name, data):
     these expectations, based on a basename, and a dict of extensions to paths or
     file-like objects. The client code is responsible for deleting the zip
     archive when it's done."""
-#<<<<<<< HEAD
+
     handle, f = mkstemp() # we don't use the file handle directly. should we?
     if 'shp' in data:
         zip = ZipFile(f, 'w')
@@ -217,19 +217,7 @@ def prepare_upload_bundle(name, data):
                 logger.debug("================Write [%s].[%s]", fname, ext)
                 newzip.writestr(name + ext, oldzip.read(file))
     return f
-#=======
-#    fd, path = mkstemp()
-#    zip_file = ZipFile(path, 'w')
-#    for ext, stream in data.iteritems():
-#        fname = "%s.%s" % (name, ext)
-#        if (isinstance(stream, basestring)):
-#            zip_file.write(stream, fname)
-#        else:
-#            zip_file.writestr(fname, stream.read())
-#    zip_file.close()
-#    os.close(fd)
-#    return path
-#>>>>>>> gsboundless/master
+
 
 def atom_link(node):
     if 'href' in node.attrib:
