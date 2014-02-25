@@ -3,13 +3,8 @@ import logging
 from geoserver.layer import Layer
 from geoserver.resource import FeatureType, Coverage
 from geoserver.store import coveragestore_from_index, datastore_from_index, \
-    DataStore, CoverageStore, UnsavedDataStore, UnsavedCoverageStore,wmsstore_from_index,UnsavedWmsStore
-#<<<<<<< HEAD
-from geoserver.resource import FeatureType
-#=======
-#    wmsstore_from_index, UnsavedDataStore, \
-#    UnsavedCoverageStore, UnsavedWmsStore
-#>>>>>>> gsboundless/master
+    wmsstore_from_index, UnsavedDataStore, \
+    UnsavedCoverageStore, UnsavedWmsStore
 from geoserver.style import Style
 from geoserver.support import prepare_upload_bundle, url
 from geoserver.layergroup import LayerGroup, UnsavedLayerGroup
@@ -35,10 +30,9 @@ class AmbiguousRequestError(Exception):
 class FailedRequestError(Exception):
     pass
 
-#<<<<<<< HEAD
 class InvalidAttributesError(Exception):
     pass
-#=======
+
 def _name(named):
     """Get the name out of an object.  This varies based on the type of the input:
        * the "name" of a string is itself
@@ -53,7 +47,6 @@ def _name(named):
         return named.name
     else:
         raise ValueError("Can't interpret %s as a name or a configuration object" % named)
-#>>>>>>> gsboundless/master
 
 class Catalog(object):
     """
@@ -283,6 +276,66 @@ class Catalog(object):
                 a = self.get_stores(ws)
                 stores.extend(a)
             return stores
+
+    def create_native_layer(self, workspace, store, name,
+                            native_name, title, srs, attributes):
+        if isinstance(workspace, basestring):
+            ws = self.get_workspace(workspace)
+        elif workspace is None:
+            ws = self.get_default_workspace()
+        ds = self.get_store(store, ws)
+        existing_layer = self.get_resource(name, ds, ws)
+        if existing_layer is not None:
+            msg = "There is already a layer named %s in %s" % (name, workspace)
+            raise ConflictingDataError(msg)
+        if len(attributes) < 1:
+            msg = "The specified attributes are invalid"
+            raise InvalidAttributesError(msg)
+
+        has_geom = False
+        attributes_block = "<attributes>"
+        empty_opts = {}
+        for spec in attributes:
+            if len(spec) == 2:
+                att_name, binding = spec
+                opts = empty_opts
+            elif len(spec) == 3:
+                att_name, binding, opts = spec
+            else:
+                raise InvalidAttributesError("expected tuple of (name,binding,dict?)")
+
+            nillable = opts.get("nillable",False)
+
+            if binding.find("com.vividsolutions.jts.geom") >= 0:
+                has_geom = True
+
+            attributes_block += ("<attribute>"
+                                 "<name>{name}</name>"
+                                 "<binding>{binding}</binding>"
+                                 "<nillable>{nillable}</nillable>"
+                                 "</attribute>").format(name=att_name, binding=binding, nillable=nillable)
+        attributes_block += "</attributes>"
+
+        if has_geom == False:
+            msg = "Geometryless layers are not currently supported"
+            raise InvalidAttributesError(msg)
+
+        xml = ("<featureType>"
+               "<name>{name}</name>"
+               "<nativeName>{native_name}</nativeName>"
+               "<title>{title}</title>"
+               "<srs>{srs}</srs>"
+               "{attributes}"
+               "</featureType>").format(name=name.encode('UTF-8','strict'), native_name=native_name.encode('UTF-8','strict'),
+                                        title=title.encode('UTF-8','strict'), srs=srs,
+                                        attributes=attributes_block)
+        headers = { "Content-Type": "application/xml" }
+        url = '%s/workspaces/%s/datastores/%s/featuretypes?charset=UTF-8' % (self.service_url, ws.name, store)
+        headers, response = self.http.request(url, "POST", xml, headers)
+        assert 200 <= headers.status < 300, "Tried to create PostGIS Layer but got " + str(headers.status) + ": " + response
+        self._cache.clear()
+        return self.get_resource(name, ds, ws)
+
 
     def create_datastore(self, name, workspace=None):
         if isinstance(workspace, basestring):

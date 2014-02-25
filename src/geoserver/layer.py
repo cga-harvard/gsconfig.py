@@ -37,28 +37,22 @@ def _write_attribution(builder, attr):
         builder.end("logoHeight")
     builder.end("attribution")
 
-def _write_style_element(builder, name):
-    ws, name = name.split(':') if ':' in name else (None, name)
-    builder.start("name", dict())
-    builder.data(name)
-    builder.end("name")
-    if ws:
-        builder.start("workspace", dict())
-        builder.data(ws)
-        builder.end("workspace")
-
 def _write_default_style(builder, name):
     builder.start("defaultStyle", dict())
     if name is not None:
-        _write_style_element(builder, name)
-    builder.end("defaultStyle")
+        builder.start("name", dict())
+        builder.data(name)
+        builder.end("name")
+        builder.end("defaultStyle")
 
 
 def _write_alternate_styles(builder, styles):
     builder.start("styles", dict())
     for s in styles:
         builder.start("style", dict())
-        _write_style_element(builder, getattr(s, 'fqn', s))
+        builder.start("name", dict())
+        builder.data(s.name)
+        builder.end("name")
         builder.end("style")
     builder.end("styles")
 
@@ -89,21 +83,16 @@ class Layer(ResourceInfo):
             return self.dirty['default_style']
         if self.dom is None:
             self.fetch()
-        element = self.dom.find("defaultStyle")
+        name = self.dom.find("defaultStyle/name")
         # aborted data uploads can result in no default style
-        return self._resolve_style(element) if element is not None else None
-
-    def _resolve_style(self, element):
-        # instead of using name or the workspace element (which only appears
-        # in >=2.4), just use the atom link href attribute
-        atom_link = [ n for n in element.getchildren() if 'href' in n.attrib ]
-        if atom_link:
-            style_workspace_url = atom_link[0].attrib.get("href")
-            return self.catalog.get_style_by_url(style_workspace_url)
+        if name is not None:
+            return self.catalog.get_style(name.text)
+        else:
+            return None
 
     def _set_default_style(self, style):
         if isinstance(style, Style):
-            style = style.fqn
+            style = style.name
         self.dirty["default_style"] = style
 
     def _get_alternate_styles(self):
@@ -111,8 +100,8 @@ class Layer(ResourceInfo):
             return self.dirty["alternate_styles"]
         if self.dom is None:
             self.fetch()
-        styles_list = self.dom.findall("styles/style")
-        return filter(None, [ self._resolve_style(s) for s in styles_list ])
+        styles = self.dom.findall("styles/style/name")
+        return [Style(self.catalog, s.text) for s in styles]
 
     def _set_alternate_styles(self, styles):
         self.dirty["alternate_styles"] = styles
