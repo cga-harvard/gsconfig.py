@@ -1,8 +1,8 @@
 import geoserver.workspace as ws
 from geoserver.resource import featuretype_from_index, coverage_from_index, \
-        wmslayer_from_index
+    wmslayer_from_index
 from geoserver.support import ResourceInfo, xml_property, key_value_pairs, \
-        write_bool, write_dict, write_string, url
+    write_bool, write_dict, write_string, url
 
 def datastore_from_index(catalog, workspace, node):
     name = node.find("name")
@@ -33,8 +33,8 @@ class DataStore(ResourceInfo):
 
     @property
     def href(self):
-        return url(self.catalog.service_url, 
-            ["workspaces", self.workspace.name, "datastores", self.name + ".xml"])
+        return url(self.catalog.service_url,
+                   ["workspaces", self.workspace.name, "datastores", self.name + ".xml"])
 
     enabled = xml_property("enabled", lambda x: x.text == "true")
     name = xml_property("name")
@@ -49,7 +49,7 @@ class DataStore(ResourceInfo):
 
     def get_resources(self, name=None, available=False):
         res_url = url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "datastores", self.name, "featuretypes.xml"])
+                      ["workspaces", self.workspace.name, "datastores", self.name, "featuretypes.xml"])
         if available:
             res_url += "?list=available"
         xml = self.catalog.get_xml(res_url)
@@ -101,7 +101,7 @@ class CoverageStore(ResourceInfo):
     @property
     def href(self):
         return url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "coveragestores", self.name + ".xml"])
+                   ["workspaces", self.workspace.name, "coveragestores", self.name + ".xml"])
 
     enabled = xml_property("enabled", lambda x: x.text == "true")
     name = xml_property("name")
@@ -116,7 +116,7 @@ class CoverageStore(ResourceInfo):
 
     def get_resources(self, name=None):
         res_url = url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "coveragestores", self.name, "coverages.xml"])
+                      ["workspaces", self.workspace.name, "coveragestores", self.name, "coverages.xml"])
 
         xml = self.catalog.get_xml(res_url)
 
@@ -137,12 +137,12 @@ class UnsavedCoverageStore(CoverageStore):
     def __init__(self, catalog, name, workspace):
         super(UnsavedCoverageStore, self).__init__(catalog, workspace, name)
         self.dirty.update(name=name, enabled = True, type="GeoTIFF",
-                url = "file:data/")
+                          url = "file:data/")
 
     @property
     def href(self):
         return url(self.catalog.service_url,
-            ["workspaces", self.workspace.name, "coveragestores"], dict(name=self.name))
+                   ["workspaces", self.workspace.name, "coveragestores"], dict(name=self.name))
 
 class WmsStore(ResourceInfo):
     resource_type = "wmsStore"
@@ -158,7 +158,7 @@ class WmsStore(ResourceInfo):
         self.name = name
         self.metadata = {}
         self.metadata['user'] = user
-        self.metadata['password'] = password 
+        self.metadata['password'] = password
 
     @property
     def href(self):
@@ -177,24 +177,34 @@ class WmsStore(ResourceInfo):
                    metadata = write_dict("metadata"))
 
 
-    def get_resources(self, available=False):
-        
+    def get_resources(self, name=None, available=False):
+
         res_url = "%s/workspaces/%s/wmsstores/%s/wmslayers.xml" % (
-                   self.catalog.service_url,
-                   self.workspace.name,
-                   self.name
-                )
+            self.catalog.service_url,
+            self.workspace.name,
+            self.name
+        )
+        layer_name_attr = "wmsLayer"
+
         if available:
             res_url += "?list=available"
+            layer_name_attr +' "Name'
 
         xml = self.catalog.get_xml(res_url)
         def wl_from_node(node):
             return wmslayer_from_index(self.catalog, self.workspace, self, node)
 
+        #if name passed, return only one FeatureType, otherwise return all FeatureTypes in store:
+        if name is not None:
+            for node in xml.findall(layer_name_attr):
+                if node.findtext("name") == name:
+                    return wl_from_node(node)
+            return None
+
         if available:
-            return [str(node.text) for node in xml.findall("wmsLayerName")]
+            return [str(node.text) for node in xml.findall(layer_name_attr)]
         else:
-            return [wl_from_node(node) for node in xml.findall("wmsLayer")]
+            return [wl_from_node(node) for node in xml.findall(layer_name_attr)]
 
 class UnsavedWmsStore(WmsStore):
     save_method = "POST"
