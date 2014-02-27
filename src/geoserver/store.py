@@ -188,7 +188,7 @@ class WmsStore(ResourceInfo):
 
         if available:
             res_url += "?list=available"
-            layer_name_attr +' "Name'
+            layer_name_attr += 'Name'
 
         xml = self.catalog.get_xml(res_url)
         def wl_from_node(node):
