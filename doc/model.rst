@@ -36,7 +36,7 @@ Once you have the prerequisite software installed, follow these steps:
 
 1. Fetch the gsconfig.py sources::
 
-   $ git clone http://github.com/dwins/gsconfig.py.git/
+   $ git clone git://github.com/dwins/gsconfig.py.git
 
 2. Switch directories to the new copy of gsconfig.
 
@@ -70,7 +70,7 @@ If you are using other credentials (highly recommended for production,) you can 
 
     from geoserver.catalog import Catalog
     cat = Catalog("http://example.com/geoserver/rest",
-        user="root", password="t0ps3cr3t")
+        username="root", password="t0ps3cr3t")
 
 For simplicity's sake, other examples in this documentation will assume you're working against a GeoServer installed locally using the default security settings.
 
@@ -312,13 +312,13 @@ If you know a LayerGroup's name you can also retrieve it directly::
 
     from geoserver.catalog import Catalog
     cat = Catalog("http://localhost:8080/geoserver/rest")
-    that_group = cat.get_layergroups("basemap")
+    that_group = cat.get_layergroup("basemap")
 
 Once you have a LayerGroup, you can manipulate its properties to find out what Layers and Styles it uses::
 
     from geoserver.catalog import Catalog
     cat = Catalog("http://localhost:8080/geoserver/rest")
-    that_group = cat.get_layergroups("basemap")
+    that_group = cat.get_layergroup("basemap")
     assert len(that_group.styles) == len(that_group.layers)
 
 When working with LayerGroups it is important to ensure that the ``layers`` list and ``styles`` list have the same length before saving any changes.

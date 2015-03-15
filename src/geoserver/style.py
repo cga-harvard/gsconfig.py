@@ -1,21 +1,40 @@
-from geoserver.support import ResourceInfo, atom_link, xml_property
-import re
+from geoserver.support import ResourceInfo, url, xml_property
 
 class Style(ResourceInfo):
-    def __init__(self, catalog, name):
+    def __init__(self, catalog, name, workspace=None):
         super(Style, self).__init__()
         assert isinstance(name, basestring)
 
         self.catalog = catalog
+        self.workspace = workspace
         self.name = name
         self._sld_dom = None
 
     @property
+    def fqn(self):
+        return self.name if not self.workspace else '%s:%s' % (self.workspace, self.name)
+
+    @property
     def href(self):
-        return "%s/styles/%s.xml" % (self.catalog.service_url, self.name)
+        return self._build_href('.xml')
 
     def body_href(self):
-        return "%s/styles/%s.sld" % (self.catalog.service_url, self.name)
+        return self._build_href('.sld')
+
+    @property
+    def create_href(self):
+        return self._build_href('.xml', True)
+
+    def _build_href(self, extension, create=False):
+        path_parts = ["styles"]
+        query = {}
+        if not create:
+            path_parts.append(self.name + extension)
+        else:
+            query['name'] = self.name
+        if self.workspace is not None:
+            path_parts = ["workspaces", getattr(self.workspace, 'name', self.workspace)] + path_parts
+        return url(self.catalog.service_url, path_parts, query)
 
     filename = xml_property("filename")
 
@@ -38,40 +57,10 @@ class Style(ResourceInfo):
 
     @property
     def sld_body(self):
-        response, content = self.catalog.http.request(self.body_href())
+        content = self.catalog.http.request(self.body_href())[1]
         return content
 
     def update_body(self, body):
         headers = { "Content-Type": "application/vnd.ogc.sld+xml" }
-        response, content = self.catalog.http.request(
-                self.body_href(), "PUT", body, headers)
-
-# class Style(ResourceInfo):
-#   def __init__(self,catalog, node):
-#     self.catalog = catalog
-#     self.name = node.find("name").text    
-#     self.href = atom_link(node)
-#     self.update()
-# 
-#   def update(self):
-#     ResourceInfo.update(self)
-#     self.name = self.metadata.find("name").text
-#     self.filename = self.metadata.find("filename").text
-#     # Get the raw sld
-#     sld_url = self.href.replace(".xml", ".sld")
-#     sld_xml = self.catalog.get_xml(sld_url)
-#     # Obtain the user style node where title and name are located
-#     user_style = sld_xml.find("{http://www.opengis.net/sld}NamedLayer/{http://www.opengis.net/sld}UserStyle")
-#     # Extract name and title nodes from user_style
-#     name_node = user_style.find("{http://www.opengis.net/sld}Name")
-#     title_node = user_style.find("{http://www.opengis.net/sld}Title")
-#     # Store the text value of sld name and title if present
-#     self.sld_name = name_node.text if hasattr(name_node, 'text') else None
-#     self.sld_title = title_node.text if hasattr(title_node, 'text') else None
-# 
-#   def body_href(self):
-#       style_container = re.sub(r"/rest$", "/styles", self.catalog.service_url)
-#       return "%s/%s" % (style_container, self.filename)
-# 
-#   def __repr__(self):
-#     return "Style[%s]" % self.name
+        self.catalog.http.request(
+            self.body_href(), "PUT", body, headers)
