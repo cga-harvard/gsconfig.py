@@ -342,7 +342,7 @@ class Catalog(object):
         headers, response = self.http.request(wms_url, "POST", data, headers)
 
         self._cache.clear()
-        if headers.status < 200 or headers.status > 299: raise UploadError(response) 
+        if headers.status < 200 or headers.status > 299: raise UploadError(response)
         return self.get_resource(name, store=store, workspace=workspace)
 
     def create_native_layer(self, workspace, store, name,
@@ -350,7 +350,7 @@ class Catalog(object):
         """
         Physically create a layer in one of GeoServer's datastores.
         For example, this will actually create a table in a Postgis store.
-        
+
         Parameters include:
         workspace - the Workspace object or name of the workspace of the store to
            use
@@ -362,7 +362,7 @@ class Catalog(object):
         srs - the SRID for the SRS to use (like "EPSG:4326" for lon/lat)
         attributes - a dict specifying the names and types of the attributes for
            the new table.  Types should be specified using Java class names:
-        
+
            * boolean = java.lang.Boolean
            * byte = java.lang.Byte
            * timestamp = java.util.Date
@@ -378,14 +378,14 @@ class Catalog(object):
         elif workspace is None:
             ws = self.get_default_workspace()
         ds = self.get_store(store, ws)
-        existing_layer = self.get_resource(name, ds, ws) 
+        existing_layer = self.get_resource(name, ds, ws)
         if existing_layer is not None:
             msg = "There is already a layer named %s in %s" % (name, workspace)
             raise ConflictingDataError(msg)
         if len(attributes) < 1:
             msg = "The specified attributes are invalid"
             raise InvalidAttributesError(msg)
-        
+
         has_geom = False
         attributes_block = "<attributes>"
         empty_opts = {}
@@ -397,30 +397,31 @@ class Catalog(object):
                 att_name, binding, opts = spec
             else:
                 raise InvalidAttributesError("expected tuple of (name,binding,dict?)")
-        
+
             nillable = opts.get("nillable",False)
-        
+
             if binding.find("com.vividsolutions.jts.geom") >= 0:
                 has_geom = True
-        
+
             attributes_block += ("<attribute>"
                 "<name>{name}</name>"
                 "<binding>{binding}</binding>"
                 "<nillable>{nillable}</nillable>"
                 "</attribute>").format(name=att_name, binding=binding, nillable=nillable)
         attributes_block += "</attributes>"
-        
+
         if has_geom == False:
             msg = "Geometryless layers are not currently supported"
             raise InvalidAttributesError(msg)
-        
+
         xml = ("<featureType>"
                 "<name>{name}</name>"
                 "<nativeName>{native_name}</nativeName>"
                 "<title>{title}</title>"
                 "<srs>{srs}</srs>"
+                "<latLonBoundingBox><minx>-180</minx><maxx>180</maxx><miny>-90</miny><maxy>90</maxy><crs>EPSG:4326</crs></latLonBoundingBox>"
                 "{attributes}"
-                "</featureType>").format(name=name.encode('UTF-8','strict'), native_name=native_name.encode('UTF-8','strict'), 
+                "</featureType>").format(name=name.encode('UTF-8','strict'), native_name=native_name.encode('UTF-8','strict'),
                                             title=title.encode('UTF-8','strict'), srs=srs,
                                             attributes=attributes_block)
         headers = { "Content-Type": "application/xml" }
@@ -452,8 +453,8 @@ class Catalog(object):
             params["charset"] = charset
 
         headers = { 'Content-Type': 'application/zip', 'Accept': 'application/xml' }
-        upload_url = url(self.service_url, 
-            ["workspaces", workspace, "datastores", store, "file.shp"], params) 
+        upload_url = url(self.service_url,
+            ["workspaces", workspace, "datastores", store, "file.shp"], params)
 
         with open(bundle, "rb") as f:
             data = f.read()
@@ -664,7 +665,7 @@ class Catalog(object):
         '''Print granules of an existing imagemosaic'''
         params = dict()
         if filter is not None:
-            params['filter'] = filter        
+            params['filter'] = filter
         cs_url = url(self.service_url,
             ["workspaces", store.workspace.name, "coveragestores", store.name, "coverages", coverage, "index/granules.json"], params)
         # GET /workspaces/<ws>/coveragestores/<name>/coverages/<coverage>/index/granules.json
@@ -708,7 +709,7 @@ class Catalog(object):
                 store = self.get_store(store, workspace)
             if store is not None:
                 return store.get_resources(name)
-        
+
         if store is not None:
             candidates = [s for s in self.get_resources(store) if s.name == name]
             if len(candidates) == 0:
@@ -724,7 +725,7 @@ class Catalog(object):
                 if resource is not None:
                     return resource
             return None
-    
+
         for ws in self.get_workspaces():
             resource = self.get_resource(name, workspace=ws)
             if resource is not None:
@@ -780,7 +781,7 @@ class Catalog(object):
         return lyrs
 
     def get_layergroup(self, name=None):
-        try: 
+        try:
             group_url = url(self.service_url, ["layergroups", name + ".xml"])
             group = self.get_xml(group_url)
             return LayerGroup(self, group.find("name").text)
